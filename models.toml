@@ -1,0 +1,52 @@
+# models.toml — In-source whisper.cpp model registry (D-22).
+#
+# Every entry pins:
+#   - tier: machine-readable preset key (must match keys in pipeline/presets.py)
+#   - display_name: shown in picker page (D-14 — verbatim, do not paraphrase)
+#   - description: shown in picker page (D-14 — verbatim, do not paraphrase)
+#   - size_bytes: download size for picker page card
+#   - url: HTTPS-only download URL (huggingface CDN preferred — no auth required)
+#   - sha256: post-download verification (download/resumable.py — plan 07-04)
+#   - filename: target filename in cache_dir() / models/
+#   - realtime_factor: RTF on reference Vulkan GPU (AMD RX 6600 class — D-19 input)
+
+[whisper.fast]
+tier = "fast"
+display_name = "Fast"
+description = "Quickest. Will catch most words but expect a few mistakes on unusual names or noisy audio. Best for quick drafts."
+size_bytes = 488_000_000
+url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+sha256 = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+filename = "ggml-small.bin"
+# D-19 input: realtime factor on a reference Vulkan GPU (AMD RX 6600 class).
+# Picker server multiplies by gpu_class_multiplier (vulkan=1.0, metal=1.2, cpu=8.0)
+# to render "~Xmin for a 30-min recording (your <gpu_label>)" strings.
+realtime_factor = 0.15
+
+[whisper.average]
+tier = "average"
+display_name = "Average"
+description = "Recommended. Balanced. Almost no mistakes on clear speech. Best for most meetings."
+size_bytes = 1_530_000_000
+url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin"
+sha256 = "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"
+filename = "ggml-medium.bin"
+realtime_factor = 0.30
+recommended = true
+
+[whisper.best]
+tier = "best"
+display_name = "Best"
+description = "Slowest, highest accuracy. Worth it for important recordings or multilingual content."
+size_bytes = 3_090_000_000
+url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin"
+sha256 = "TBD-PIN-FROM-FIRST-DOWNLOAD"
+filename = "ggml-large-v3.bin"
+realtime_factor = 0.55
+
+# pyannote weights resolve through huggingface_hub on first import.
+# Engine never downloads pyannote via this registry. The user-supplied
+# HuggingFace token (collected by the picker page in plan 07-05) is what
+# unlocks gated pyannote.audio model downloads.
+[pyannote]
+note = "Resolved by pyannote.audio on first import; not downloaded via this registry."
