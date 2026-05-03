@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.python-version
+
+# PyInstaller
+dist/
+build/
+*.spec
+
+# Resumable downloads
+*.partial
+
+# Secrets (CLAUDE.md SEC-04)
+.env*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
