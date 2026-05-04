@@ -1,0 +1,113 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}   # allow manual trigger for dry runs (e.g. v0.1.0-rc1 smoke)
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: linux-amd64
+            backend: _xorg
+            whisper_script: scripts/build_whisper_cpp_linux.sh
+            whisper_invocation: "bash scripts/build_whisper_cpp_linux.sh"
+          - os: macos-14
+            arch: darwin-arm64
+            backend: _darwin
+            whisper_script: scripts/build_whisper_cpp_macos.sh
+            whisper_invocation: "bash scripts/build_whisper_cpp_macos.sh"
+          - os: windows-latest
+            arch: windows-amd64
+            backend: _win32
+            whisper_script: scripts/build_whisper_cpp_windows.ps1
+            whisper_invocation: "pwsh scripts/build_whisper_cpp_windows.ps1"
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.11"
+
+      - name: Sync deps
+        run: uv sync
+
+      # Open Q3 mitigation — windows-latest does not ship Vulkan SDK by default
+      - name: Install Vulkan SDK (Windows only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install vulkan-sdk -y --no-progress
+
+      - name: Build whisper-cli
+        shell: bash
+        run: |
+          # Run the per-OS script; capture the printed path from the last line of stdout
+          WHISPER_CLI_PATH=$(${{ matrix.whisper_invocation }} | tail -n1)
+          # Trim any trailing carriage return (Windows pwsh stdout)
+          WHISPER_CLI_PATH="${WHISPER_CLI_PATH%$'\r'}"
+          echo "WHISPER_CLI=$WHISPER_CLI_PATH" >> "$GITHUB_ENV"
+          echo "Built whisper-cli at: $WHISPER_CLI_PATH"
+
+      - name: Build engine binary
+        shell: bash
+        env:
+          PYSTRAY_BACKEND: ${{ matrix.backend }}
+        run: bash scripts/build.sh
+
+      - name: Generate SHA-256 sidecar (atomic with binary rename)
+        shell: bash
+        run: |
+          cd dist
+          # T-7-05 mitigation — rename + sha256sum in the SAME step (sidecar tied to binary)
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            mv transcribe-engine.exe "transcribe-engine-${{ matrix.arch }}.exe"
+            sha256sum "transcribe-engine-${{ matrix.arch }}.exe" > "transcribe-engine-${{ matrix.arch }}.exe.sha256"
+          else
+            mv transcribe-engine "transcribe-engine-${{ matrix.arch }}"
+            sha256sum "transcribe-engine-${{ matrix.arch }}" > "transcribe-engine-${{ matrix.arch }}.sha256"
+          fi
+          ls -lh
+
+      - name: Smoke test (--version)
+        shell: bash
+        run: |
+          cd dist
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            ./transcribe-engine-${{ matrix.arch }}.exe --version
+          else
+            ./transcribe-engine-${{ matrix.arch }} --version
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}
+          path: dist/transcribe-engine-${{ matrix.arch }}*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create the GitHub Release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          draft: false
+          generate_release_notes: true
