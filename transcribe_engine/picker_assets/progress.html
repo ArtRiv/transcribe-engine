@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Downloading models...</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Downloading model files</h1>
+  <p class="subtitle">Please don't close this window. The engine will let you know when it's ready.</p>
+
+  <div class="progress"><div id="bar" class="progress-bar"></div></div>
+  <div id="meta" class="progress-meta">Starting...</div>
+  <div id="error-box"></div>
+
+  <script>
+    function fmtBytes(n) {
+      if (n < 1024) return n + ' B';
+      if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+      if (n < 1024*1024*1024) return (n/1024/1024).toFixed(1) + ' MB';
+      return (n/1024/1024/1024).toFixed(2) + ' GB';
+    }
+    async function poll() {
+      try {
+        const r = await fetch('/status');
+        const s = await r.json();
+        if (s.state === 'error') {
+          document.getElementById('error-box').innerHTML =
+            '<div class="error">' + (s.error || 'Download failed') + '</div>';
+          return;
+        }
+        if (s.state === 'done') {
+          window.location.href = '/done';
+          return;
+        }
+        const pct = s.bytes_total > 0 ? (s.bytes_done / s.bytes_total * 100) : 0;
+        document.getElementById('bar').style.width = pct.toFixed(1) + '%';
+        document.getElementById('meta').textContent =
+          fmtBytes(s.bytes_done) + ' / ' + fmtBytes(s.bytes_total) +
+          (s.eta_seconds ? ' · ~' + s.eta_seconds + 's remaining' : '');
+        setTimeout(poll, 500);
+      } catch(e) {
+        setTimeout(poll, 1000);  // backoff slightly on error
+      }
+    }
+    poll();
+  </script>
+</body>
+</html>

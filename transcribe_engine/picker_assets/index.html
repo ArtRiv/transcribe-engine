@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set up transcribe-engine</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Set up transcribe-engine</h1>
+  <p class="subtitle">Pick a quality tier and we'll download the model files. Audio never leaves your machine.</p>
+  <div class="gpu-line">Detected: <strong>{{ gpu_label }}</strong></div>
+
+  <h2>Choose a quality tier</h2>
+  <div id="tiers">
+    {{ tier_cards }}
+  </div>
+
+  <div class="hf-section">
+    <h2>HuggingFace token (required for speaker labels)</h2>
+    <p class="hf-help">
+      Speaker diarization uses <a href="https://huggingface.co/pyannote/speaker-diarization-3.1" target="_blank" rel="noopener">pyannote</a>,
+      which requires a free HuggingFace account. Accept the model terms at
+      <a href="https://huggingface.co/pyannote/segmentation-3.0" target="_blank" rel="noopener">pyannote/segmentation-3.0</a>
+      and
+      <a href="https://huggingface.co/pyannote/speaker-diarization-3.1" target="_blank" rel="noopener">pyannote/speaker-diarization-3.1</a>,
+      then paste your token from
+      <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">huggingface.co/settings/tokens</a> below.
+    </p>
+    <input id="hf-token" type="password" placeholder="hf_..." autocomplete="off" spellcheck="false">
+    <p class="hf-help">Stored locally in your config dir with file mode 0600. Never logged. Never sent anywhere except HuggingFace.</p>
+  </div>
+
+  <button id="download-btn" disabled>Select a tier to continue</button>
+
+  <script>
+    let selectedTier = null;
+    document.querySelectorAll('.tier-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        selectedTier = card.dataset.tier;
+        updateButton();
+      });
+    });
+    document.getElementById('hf-token').addEventListener('input', updateButton);
+    function updateButton() {
+      const btn = document.getElementById('download-btn');
+      const hasToken = document.getElementById('hf-token').value.trim().length > 0;
+      if (selectedTier) {
+        btn.disabled = false;
+        btn.textContent = hasToken ? 'Download & set up' : 'Download (skip speaker labels for now)';
+      } else {
+        btn.disabled = true;
+        btn.textContent = 'Select a tier to continue';
+      }
+    }
+    document.getElementById('download-btn').addEventListener('click', async () => {
+      const token = document.getElementById('hf-token').value.trim();
+      if (token) {
+        await fetch('/save-hf-token', { method: 'POST', body: JSON.stringify({ token }) });
+      }
+      await fetch('/start-download', { method: 'POST', body: JSON.stringify({ tier: selectedTier }) });
+      window.location.href = '/progress';
+    });
+  </script>
+</body>
+</html>
