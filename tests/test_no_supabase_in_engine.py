@@ -25,6 +25,13 @@ from pathlib import Path
 import pytest
 
 ENGINE_ROOT = Path(__file__).parent.parent / "transcribe_engine"
+
+# ALLOW-LIST (Phase 8 D-17 pivot, 2026-05-04):
+#   `realtime` (the standalone supabase-realtime-py client) is permitted.
+#   It speaks Phoenix Channels over websockets — no Supabase user JWT, no DB,
+#   no Storage. The signaling/state events fan out via Realtime Broadcast.
+#   The umbrella `supabase` package (which DOES embed PostgREST + Storage clients
+#   that could leak service-role usage) remains BANNED.
 BANNED_IMPORT_NAMES = {
     "supabase",
     "httpx",
@@ -70,3 +77,24 @@ def test_module_has_no_supabase_url_string_literals(path: Path) -> None:
                 assert needle not in node.value, (
                     f"{path.relative_to(ENGINE_ROOT)} contains banned string {needle!r}"
                 )
+
+
+def test_realtime_package_is_allowed() -> None:
+    """Guard: the standalone `realtime` package must remain importable.
+
+    This positive sentinel ensures the allow-list comment (Phase 8 D-17 pivot)
+    is not accidentally reverted. If `realtime` is accidentally added back to
+    BANNED_IMPORT_NAMES, this test will fail loudly.
+
+    The `realtime` package speaks Phoenix Channels over websockets only —
+    it carries no Supabase service-role key, no PostgREST client, and no
+    Storage client. The umbrella `supabase` package (which embeds all of those)
+    remains BANNED per the comment block above BANNED_IMPORT_NAMES.
+    """
+    assert "realtime" not in BANNED_IMPORT_NAMES, (
+        "BANNED_IMPORT_NAMES must not contain 'realtime' — "
+        "it is allowed by the Phase 8 D-17 pivot (see allow-list comment)."
+    )
+    import realtime  # noqa: F401 — validates the package is actually installed
+
+    assert realtime is not None

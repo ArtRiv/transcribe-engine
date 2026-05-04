@@ -18,6 +18,17 @@ dependencies = [
   "lightning>=2.6,<3",
   # Cross-platform paths — RESEARCH "Don't Hand-Roll"
   "platformdirs>=4",
+  # Phase 8: WebRTC + signaling transport (Wave-0 spike-validated 2026-05-04)
+  # aiortc: Python WebRTC implementation (RTCPeerConnection + RTCDataChannel + ICE)
+  # Binary wheels available for Linux/macOS/Windows; asyncio-native.
+  "aiortc>=1.13,<2",
+  # pynacl: libsodium binding for Ed25519 sign/verify (D-01 challenge-response)
+  # Deterministic signing; no nonce-reuse footgun. PyInstaller-clean.
+  "pynacl>=1.5,<2",
+  # realtime: standalone supabase-realtime-py client (D-17 Supabase Realtime pivot)
+  # Pure Phoenix Channels over websockets — no Supabase user JWT, no DB, no Storage.
+  # Explicitly allowed by engine perimeter sentinel (see tests/test_no_supabase_in_engine.py).
+  "realtime>=2.0,<3",
 ]
 
 [project.optional-dependencies]
@@ -63,7 +74,7 @@ ignore = ["E501"]  # line-length handled by formatter
 asyncio_mode = "auto"
 markers = [
   "gpu: requires a real GPU (skipped in CI per D-04)",
-  "slow: requires real model weights or long-running fixtures",
+  "slow: requires real model weights, long-running fixtures, or PyInstaller builds (opt-in via -m slow or RUN_SPIKE=1)",
 ]
 testpaths = ["tests"]
 addopts = "-x"

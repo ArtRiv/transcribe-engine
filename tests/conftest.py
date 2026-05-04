@@ -15,6 +15,13 @@ Engine-side replacements:
   - mock_gpu_info: stub GpuInfo for CPU branch
   - temp_xdg_dirs: monkeypatches XDG dirs so paths.* don't pollute ~/.config
   - mock_whisper_cli: fake whisper-cli binary emitting stub transcript.json
+
+Spike test gating (Phase 8 Wave-0):
+  - tests/spike/test_aiortc_pyinstaller.py::test_aiortc_imports_in_frozen_binary
+    is marked @pytest.mark.slow and internally guarded behind RUN_SPIKE=1.
+    It is NOT collected via collect_ignore_glob because the source-mode test in
+    the same file (test_aiortc_imports_in_source) must always run.
+    Run the slow test with: RUN_SPIKE=1 uv run pytest -m slow tests/spike/
 """
 import os
 from pathlib import Path
