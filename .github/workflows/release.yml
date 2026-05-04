@@ -39,11 +39,31 @@ jobs:
       - name: Sync deps
         run: uv sync
 
-      # Open Q3 mitigation — windows-latest does not ship Vulkan SDK by default
+      # Linux build prereqs — glslc (Vulkan shader compiler) + Vulkan headers
+      # are not on ubuntu-latest by default; whisper.cpp's Vulkan backend
+      # cannot compile without them.
+      - name: Install Vulkan build deps (Linux only)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            glslang-tools libvulkan-dev mesa-vulkan-drivers vulkan-tools
+
+      # Open Q3 mitigation — windows-latest does not ship Vulkan SDK by default.
+      # choco installs the SDK but does NOT propagate VULKAN_SDK / PATH to
+      # subsequent steps; we discover the install path and export both
+      # GITHUB_ENV (for cmake's find_package(Vulkan)) and GITHUB_PATH (for glslc).
       - name: Install Vulkan SDK (Windows only)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install vulkan-sdk -y --no-progress
+        run: |
+          choco install vulkan-sdk -y --no-progress
+          $sdkPath = (Get-ChildItem -Path 'C:\VulkanSDK' -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          if (-not $sdkPath) { throw 'Vulkan SDK install path not found under C:\VulkanSDK' }
+          "VULKAN_SDK=$sdkPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "$sdkPath\Bin"        | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          Write-Host "Vulkan SDK installed at: $sdkPath"
 
       - name: Build whisper-cli
         shell: bash
@@ -65,13 +85,19 @@ jobs:
         shell: bash
         run: |
           cd dist
-          # T-7-05 mitigation — rename + sha256sum in the SAME step (sidecar tied to binary)
+          # T-7-05 mitigation — rename + sha256 in the SAME step (sidecar tied to binary).
+          # macOS does not ship `sha256sum`; use `shasum -a 256`.
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            SHA_CMD="shasum -a 256"
+          else
+            SHA_CMD="sha256sum"
+          fi
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             mv transcribe-engine.exe "transcribe-engine-${{ matrix.arch }}.exe"
-            sha256sum "transcribe-engine-${{ matrix.arch }}.exe" > "transcribe-engine-${{ matrix.arch }}.exe.sha256"
+            $SHA_CMD "transcribe-engine-${{ matrix.arch }}.exe" > "transcribe-engine-${{ matrix.arch }}.exe.sha256"
           else
             mv transcribe-engine "transcribe-engine-${{ matrix.arch }}"
-            sha256sum "transcribe-engine-${{ matrix.arch }}" > "transcribe-engine-${{ matrix.arch }}.sha256"
+            $SHA_CMD "transcribe-engine-${{ matrix.arch }}" > "transcribe-engine-${{ matrix.arch }}.sha256"
           fi
           ls -lh
 
