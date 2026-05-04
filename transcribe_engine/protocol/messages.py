@@ -15,7 +15,7 @@ frontend/tests/lib/webrtc/protocol.test.ts catches drift (T-08-05-02).
 import json
 from typing import Literal, Optional, Union
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 # Wire protocol version — bumped when the message shape changes in a
 # backwards-incompatible way. Both engine and frontend must agree on this.
@@ -31,26 +31,26 @@ class SdpDescription(TypedDict):
     sdp: str
 
 
-class IceCandidate(TypedDict, total=False):
+class IceCandidate(TypedDict):
     candidate: str
-    sdpMid: Optional[str]
-    sdpMLineIndex: Optional[int]
+    sdpMid: NotRequired[Optional[str]]
+    sdpMLineIndex: NotRequired[Optional[int]]
 
 
-class TranscriptWord(TypedDict, total=False):
+class TranscriptWord(TypedDict):
     w: str       # word text
     s: float     # start seconds
     e: float     # end seconds
-    p: float     # probability (optional)
+    p: NotRequired[float]  # probability (optional)
 
 
-class TranscriptSegment(TypedDict, total=False):
+class TranscriptSegment(TypedDict):
     id: str      # "seg_NNNN" zero-padded
     start: float
     end: float
     speaker: str  # references Speaker.id
     text: str
-    words: list[TranscriptWord]
+    words: NotRequired[list[TranscriptWord]]
 
 
 class TranscriptSpeaker(TypedDict):
