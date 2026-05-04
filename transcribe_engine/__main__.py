@@ -19,7 +19,10 @@ from transcribe_engine.picker_server import start_picker
 from transcribe_engine.platform.gpu import detect_gpu
 from transcribe_engine.platform.paths import config_dir
 from transcribe_engine.state import State
-from transcribe_engine.tray import build_tray, open_hosted_frontend, open_logs_in_default_viewer
+# NOTE: `tray` is imported lazily inside main() — its `pystray` dependency
+# initializes the platform GUI backend at import time (Xlib.Display() on Linux),
+# which fails on headless systems (CI, SSH without X-forwarding) and would
+# break --version / --logs-path / --reset-models.
 
 log = logging.getLogger(__name__)
 
@@ -105,6 +108,9 @@ def main() -> int:
     def _on_quit():
         log.info("user clicked Quit; shutting down")
         icon.stop()  # type: ignore[has-type]
+
+    # Lazy import — see module-level NOTE.
+    from transcribe_engine.tray import build_tray, open_hosted_frontend, open_logs_in_default_viewer
 
     icon = build_tray(
         gpu_label=gpu.label,
