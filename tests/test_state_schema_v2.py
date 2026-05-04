@@ -160,3 +160,19 @@ def test_load_missing_file_returns_default_v2_state(tmp_path: Path) -> None:
     assert result.schema_version == 2
     assert isinstance(result.signaling, Signaling)
     assert result.protocol_version == "1"
+
+
+def test_migrate_in_place_is_noop_for_v2_file(tmp_path: Path) -> None:
+    """WR-05: migrate_in_place does NOT rewrite a file already at SCHEMA_VERSION."""
+    v2_path = tmp_path / "state.json"
+    state = State(
+        paired_user_id="user-99",
+        signaling=Signaling(supabase_url="https://s.co", channel="pair:user-99"),
+    )
+    state.save(v2_path)
+    original_mtime = v2_path.stat().st_mtime
+
+    migrate_in_place(v2_path)
+
+    # File must not have been touched (mtime unchanged)
+    assert v2_path.stat().st_mtime == original_mtime

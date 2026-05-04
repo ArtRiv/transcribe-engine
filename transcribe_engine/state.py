@@ -86,5 +86,8 @@ def migrate_in_place(path: Path) -> None:
     """
     if not path.exists():
         return
-    state = State.load(path)
-    state.save(path)
+    with open(path) as f:
+        data = json.load(f)
+    if data.get("schema_version", 1) >= SCHEMA_VERSION:
+        return  # already at current version — no-op (idempotent)
+    State.load(path).save(path)
