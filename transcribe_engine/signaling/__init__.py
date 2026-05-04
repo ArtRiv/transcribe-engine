@@ -7,6 +7,7 @@ Modules:
   client.py     — EngineSignalingClient wrapping AsyncRealtimeClient
 """
 
+from transcribe_engine.signaling.client import EngineSignalingClient, UnpairedExit
 from transcribe_engine.signaling.keepalive import Keepalive
 from transcribe_engine.signaling.reconnect import reconnect_delays
 from transcribe_engine.signaling.token import (
@@ -17,6 +18,8 @@ from transcribe_engine.signaling.token import (
 )
 
 __all__ = [
+    "EngineSignalingClient",
+    "UnpairedExit",
     "EngineUnpairedError",
     "SignalingToken",
     "SignalingTokenError",
