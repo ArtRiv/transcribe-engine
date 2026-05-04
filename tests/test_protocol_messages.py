@@ -123,8 +123,32 @@ def test_parse_wire_rejects_unknown_type() -> None:
 
 def test_parse_wire_rejects_missing_type_key() -> None:
     """parse_wire raises ValueError when type key is absent."""
-    with pytest.raises((ValueError, KeyError)):
+    with pytest.raises(ValueError, match="missing 'type'"):
         parse_wire('{"data": "no type key"}')
+
+
+def test_parse_wire_rejects_non_object_json() -> None:
+    """parse_wire raises ValueError on non-object JSON (null, list, string, number)."""
+    with pytest.raises(ValueError, match="JSON object"):
+        parse_wire("null")
+    with pytest.raises(ValueError, match="JSON object"):
+        parse_wire("[1, 2, 3]")
+    with pytest.raises(ValueError, match="JSON object"):
+        parse_wire('"a string"')
+
+
+def test_parse_wire_rejects_wrong_protocol_version() -> None:
+    """parse_wire raises ValueError when hello msg carries wrong protocol_version."""
+    msg = {"type": "hello", "version": "0.2.0", "protocol_version": "2", "gpu": "RX 6600"}
+    with pytest.raises(ValueError, match="Protocol version mismatch"):
+        parse_wire(json.dumps(msg))
+
+
+def test_parse_wire_rejects_missing_protocol_version_in_hello() -> None:
+    """parse_wire raises ValueError when hello msg is missing protocol_version."""
+    msg = {"type": "hello", "version": "0.2.0", "gpu": "RX 6600"}
+    with pytest.raises(ValueError, match="Protocol version mismatch"):
+        parse_wire(json.dumps(msg))
 
 
 # ---------------------------------------------------------------------------

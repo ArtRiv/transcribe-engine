@@ -195,15 +195,26 @@ KNOWN_MESSAGE_TYPES: list[str] = [
 def parse_wire(raw: str | bytes) -> WireMessage:
     """Decode a JSON wire message and validate its `type` discriminator.
 
-    Raises ValueError with the offending type value on unknown types.
+    Raises ValueError with the offending type value on unknown types, or when
+    `protocol_version` on a 'hello' message does not match PROTOCOL_VERSION.
     Plans 06 and 07 wrap this with try/except + ErrorMsg emission.
     """
     text = raw if isinstance(raw, str) else raw.decode()
     data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"Wire message must be a JSON object, got {type(data).__name__}")
+    if "type" not in data:
+        raise ValueError("Wire message missing 'type' field")
     msg_type = data["type"]
     if msg_type not in KNOWN_MESSAGE_TYPES:
         raise ValueError(
             f"Unknown wire message type {msg_type!r}. "
             f"Known types: {KNOWN_MESSAGE_TYPES}"
         )
+    if msg_type == "hello":
+        pv = data.get("protocol_version")
+        if pv != PROTOCOL_VERSION:
+            raise ValueError(
+                f"Protocol version mismatch: peer={pv!r} local={PROTOCOL_VERSION!r}"
+            )
     return data  # type: ignore[return-value]  # structural TypedDict — runtime check via 'type'
