@@ -39,16 +39,28 @@ jobs:
       - name: Sync deps
         run: uv sync
 
-      # Linux build prereqs — glslc (Vulkan shader compiler) + Vulkan headers
-      # are not on ubuntu-latest by default; whisper.cpp's Vulkan backend
-      # cannot compile without them.
-      - name: Install Vulkan build deps (Linux only)
+      # Linux build prereqs.
+      # `glslc` (Google shaderc — required by whisper.cpp's Vulkan backend) is
+      # NOT shipped in any default Ubuntu apt package. `glslang-tools` provides
+      # `glslangValidator` (Khronos), which is a different binary. Use LunarG's
+      # official apt repo to install the full Vulkan SDK, which includes glslc.
+      # https://vulkan.lunarg.com/doc/sdk/latest/linux/getting_started_ubuntu.html
+      - name: Install Vulkan SDK from LunarG (Linux only)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update
+          sudo apt-get install -y --no-install-recommends wget gnupg ca-certificates
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo gpg --dearmor -o /etc/apt/keyrings/lunarg.gpg
+          UBUNTU_CODENAME=$(. /etc/os-release && echo "$UBUNTU_CODENAME")
+          echo "deb [signed-by=/etc/apt/keyrings/lunarg.gpg] https://packages.lunarg.com/vulkan ${UBUNTU_CODENAME} main" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            glslang-tools libvulkan-dev mesa-vulkan-drivers vulkan-tools
+            vulkan-sdk mesa-vulkan-drivers
+          # Sanity check — fail fast if glslc still not on PATH
+          glslc --version
 
       # Open Q3 mitigation — windows-latest does not ship Vulkan SDK by default.
       # choco installs the SDK but does NOT propagate VULKAN_SDK / PATH to
