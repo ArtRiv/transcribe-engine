@@ -40,7 +40,7 @@ class _CaptureHandler(BaseHTTPRequestHandler):
     response_status: int = 200
     response_body: dict[str, Any] = {}
     captured_requests: list[dict[str, Any]] = []
-    nonce_payload: dict[str, Any] = {"nonce": "abc123", "issued_at": "2026-05-04T12:00:00Z"}
+    nonce_payload: dict[str, Any] = {"nonce": "abc123", "issued_at": 1746360000000}
     # Artificial delay for timeout test (seconds)
     delay_seconds: float = 0.0
 
@@ -81,7 +81,7 @@ def fake_server(request):
     status = getattr(request, "param", {}).get("status", 200)
     body = getattr(request, "param", {}).get("body", {})
     nonce = getattr(request, "param", {}).get(
-        "nonce", {"nonce": "abc123", "issued_at": "2026-05-04T12:00:00Z"}
+        "nonce", {"nonce": "abc123", "issued_at": 1746360000000}
     )
     delay = getattr(request, "param", {}).get("delay", 0.0)
 
@@ -154,7 +154,7 @@ def test_pair_init_signed_message_includes_gpu_and_engine_version(fake_server: s
     gpu = "RX 6600 (Vulkan)"
     engine_version = "0.2.0"
     nonce = "abc123"
-    issued_at = "2026-05-04T12:00:00Z"
+    issued_at = 1746360000000  # int — matches nonce-cache.ts Date.now() wire format
 
     pair_init_post(
         fake_server,
@@ -278,3 +278,81 @@ def test_pair_init_timeout_parameter_accepted(fake_server: str) -> None:
         http_timeout=30.0,
     )
     assert len(_CaptureHandler.captured_requests) == 1
+
+
+# ---------------------------------------------------------------------------
+# WR-03: HTTPS enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_pair_init_rejects_http_non_localhost() -> None:
+    """WR-03: http:// scheme rejected for non-localhost targets."""
+    sk = _make_signing_key()
+    with pytest.raises(PairInitError, match="insecure"):
+        pair_init_post(
+            "http://example.com",
+            code="AAAABBBB",
+            signing_key=sk,
+            gpu="GPU",
+            engine_version="0.1.0",
+        )
+
+
+def test_pair_init_allows_http_localhost(fake_server: str) -> None:
+    """WR-03: http://127.0.0.1 is allowed (dev use)."""
+    # fake_server is already http://127.0.0.1:<port>
+    sk = _make_signing_key()
+    pair_init_post(fake_server, code="AAAABBBB", signing_key=sk, gpu="GPU", engine_version="0.1.0")
+    assert len(_CaptureHandler.captured_requests) == 1
+
+
+# ---------------------------------------------------------------------------
+# WR-04: network errors mapped to PairInitError
+# ---------------------------------------------------------------------------
+
+
+def test_pair_init_nonce_get_connection_refused_raises_PairInitError() -> None:
+    """WR-04: connection refused on nonce GET raises PairInitError (not URLError)."""
+    sk = _make_signing_key()
+    with pytest.raises(PairInitError, match="nonce fetch failed"):
+        pair_init_post(
+            "http://127.0.0.1:1",  # port 1 should refuse connection
+            code="AAAABBBB",
+            signing_key=sk,
+            gpu="GPU",
+            engine_version="0.1.0",
+        )
+
+
+# ---------------------------------------------------------------------------
+# WR-09: issued_at must be int
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "fake_server",
+    [{"nonce": {"nonce": "abc123", "issued_at": "2026-05-04T12:00:00Z"}}],
+    indirect=True,
+)
+def test_pair_init_rejects_string_issued_at(fake_server: str) -> None:
+    """WR-09: PairInitError raised when issued_at is a string instead of int."""
+    sk = _make_signing_key()
+    with pytest.raises(PairInitError, match="issued_at must be int"):
+        pair_init_post(fake_server, code="AAAABBBB", signing_key=sk, gpu="GPU", engine_version="0")
+
+
+# ---------------------------------------------------------------------------
+# WR-10: nonce response shape validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "fake_server",
+    [{"nonce": {"message": "Cloudflare error"}}],  # missing nonce + issued_at
+    indirect=True,
+)
+def test_pair_init_rejects_malformed_nonce_response(fake_server: str) -> None:
+    """WR-10: PairInitError raised on unexpected nonce response shape."""
+    sk = _make_signing_key()
+    with pytest.raises(PairInitError, match="unexpected nonce response shape"):
+        pair_init_post(fake_server, code="AAAABBBB", signing_key=sk, gpu="GPU", engine_version="0")
