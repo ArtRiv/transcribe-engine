@@ -1,4 +1,4 @@
-"""System tray icon — D-09 locked 5-item menu surface.
+"""System tray icon - D-09 locked 5-item menu surface.
 
 Cross-platform via pystray (auto-selects _xorg / _darwin / _win32 backend).
 PyInstaller --hidden-import is set per-OS in build script (R-05).
@@ -40,7 +40,7 @@ def open_logs_in_default_viewer(log_path: Path) -> None:
         else:  # linux / other unix
             subprocess.run(["xdg-open", str(log_path)], check=False)
     except (OSError, FileNotFoundError):
-        pass  # fail silently — tray menu callback must not crash the daemon
+        pass  # fail silently - tray menu callback must not crash the daemon
 
 
 def build_tray(
@@ -53,13 +53,13 @@ def build_tray(
 ) -> Icon:
     """Build the locked D-09 tray menu (5 items, exact order, no additions).
 
-    - Status line (non-clickable) — `transcribe-engine v{X} — {GPU label}`
+    - Status line (non-clickable) - `transcribe-engine v{X} - {GPU label}`
     - Open Transcribe website
     - View logs
     - Manage models...
     - Quit
     """
-    title = f"transcribe-engine v{__version__} — {gpu_label}"
+    title = f"transcribe-engine v{__version__} - {gpu_label}"
     return Icon(
         "transcribe-engine",
         make_icon_image(),
@@ -75,5 +75,5 @@ def build_tray(
 
 
 def open_hosted_frontend() -> None:
-    """Default 'Open Transcribe website' callback — opens hosted webapp in default browser."""
+    """Default 'Open Transcribe website' callback - opens hosted webapp in default browser."""
     webbrowser.open(HOSTED_FRONTEND_URL)
