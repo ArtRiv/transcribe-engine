@@ -10,7 +10,7 @@ keypair_path, last_signaling_url) all None. Phase 8 (Plan 05) bumps to v2:
 v0.1.0 (Phase 7) installs upgrade silently on first boot after v0.2.0.
 """
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Optional
 
@@ -67,6 +67,11 @@ class State:
             signaling = Signaling(**signaling_raw)
         else:
             signaling = signaling_raw  # already a Signaling instance
+
+        # WR-06: filter data to only known fields to avoid TypeError on
+        # unexpected keys (hand-edited files, downgrade from a newer version).
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
 
         return cls(signaling=signaling, **data)
 

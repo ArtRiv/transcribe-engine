@@ -162,6 +162,27 @@ def test_load_missing_file_returns_default_v2_state(tmp_path: Path) -> None:
     assert result.protocol_version == "1"
 
 
+def test_load_ignores_unknown_fields_in_v2_file(tmp_path: Path) -> None:
+    """WR-06: State.load silently ignores unknown keys rather than crashing."""
+    v2_path = tmp_path / "state.json"
+    data = {
+        "schema_version": 2,
+        "paired_user_id": "u1",
+        "pubkey": None,
+        "keypair_path": None,
+        "signaling": {"supabase_url": None, "channel": None},
+        "installed_models": [],
+        "protocol_version": "1",
+        "deprecated_field": "some_value",   # unknown field
+        "future_key": 42,                   # unknown field
+    }
+    v2_path.write_text(json.dumps(data))
+    state = State.load(v2_path)  # must not raise TypeError
+    assert state.paired_user_id == "u1"
+    assert not hasattr(state, "deprecated_field")
+    assert not hasattr(state, "future_key")
+
+
 def test_migrate_in_place_is_noop_for_v2_file(tmp_path: Path) -> None:
     """WR-05: migrate_in_place does NOT rewrite a file already at SCHEMA_VERSION."""
     v2_path = tmp_path / "state.json"
