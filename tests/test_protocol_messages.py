@@ -2,7 +2,8 @@
 
 Verifies:
 - PROTOCOL_VERSION constant is "1"
-- KNOWN_MESSAGE_TYPES has exactly 13 entries (OfferMsg + AnswerMsg share 'description')
+- KNOWN_MESSAGE_TYPES has exactly 14 entries (CR-02 added job_init; OfferMsg + AnswerMsg
+  share 'description')
 - parse_wire round-trips each type
 - parse_wire rejects unknown types
 - Module uses only stdlib (json + typing)
@@ -30,9 +31,9 @@ def test_protocol_version_is_1() -> None:
 
 
 def test_known_message_types_count() -> None:
-    """Exactly 13 wire-type strings: OfferMsg + AnswerMsg share 'description'."""
-    assert len(KNOWN_MESSAGE_TYPES) == 13, (
-        f"Expected 13 type strings, got {len(KNOWN_MESSAGE_TYPES)}: {KNOWN_MESSAGE_TYPES}"
+    """Exactly 14 wire-type strings (CR-02 added job_init; OfferMsg + AnswerMsg share 'description')."""
+    assert len(KNOWN_MESSAGE_TYPES) == 14, (
+        f"Expected 14 type strings, got {len(KNOWN_MESSAGE_TYPES)}: {KNOWN_MESSAGE_TYPES}"
     )
 
 
@@ -42,6 +43,7 @@ def test_known_message_types_contains_expected_values() -> None:
         "state",
         "description",
         "candidate",
+        "job_init",
         "audio_eof",
         "checkpoint",
         "progress",
@@ -92,7 +94,17 @@ SYNTHETIC_PAYLOADS = [
             ],
         },
     },
-    {"type": "resume_query", "job_id": "job-abc-123"},
+    {
+        "type": "job_init",
+        "job_id": "user-abc123def456ab",
+        "sha256_hex": "a" * 64,
+        "total_bytes": 1048576,
+    },
+    {
+        "type": "resume_query",
+        "job_id": "user-abc123def456ab",
+        "sha256_hex": "a" * 64,
+    },
     {"type": "resume_state", "byte_offset": 262144},
     {"type": "ping"},
     {"type": "pong"},

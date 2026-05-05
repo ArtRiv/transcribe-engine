@@ -122,9 +122,23 @@ class ResultMsg(TypedDict):
     transcript: TranscriptPayload
 
 
+class JobInitMsg(TypedDict):
+    """Sent by the frontend before binary chunks begin.
+
+    CR-02: binds file identity (sha256_hex) to the job_id so the engine can
+    detect cross-file splicing on resume.  The engine persists this to a
+    sidecar file (<job_id>.meta.json) alongside the .partial.
+    """
+    type: Literal["job_init"]
+    job_id: str
+    sha256_hex: str   # lowercase hex SHA-256 of the full source file
+    total_bytes: int  # expected size in bytes (informational; not enforced)
+
+
 class ResumeQueryMsg(TypedDict):
     type: Literal["resume_query"]
     job_id: str
+    sha256_hex: str   # CR-02: must match the sidecar on the engine side
 
 
 class ResumeStateMsg(TypedDict):
@@ -155,6 +169,7 @@ WireMessage = Union[
     StateMsg,
     OfferMsg,      # AnswerMsg is structurally identical; differentiate by sdp.type
     CandidateMsg,
+    JobInitMsg,
     AudioEofMsg,
     CheckpointMsg,
     ProgressMsg,
@@ -166,15 +181,16 @@ WireMessage = Union[
     ErrorMsg,
 ]
 
-# 13 distinct `type` discriminator strings; OfferMsg and AnswerMsg share `type: 'description'`
-# and are disambiguated by `sdp.type` ('offer' vs 'answer'). The 14 message TypedDicts
-# collapse to 13 wire-format type strings — the test_known_message_types_count assertion
-# below pins this exact count.
+# 14 distinct `type` discriminator strings (was 13 before CR-02 added job_init).
+# OfferMsg and AnswerMsg share `type: 'description'` and are disambiguated by
+# sdp.type ('offer' vs 'answer'). The 15 message TypedDicts collapse to 14
+# wire-format type strings.
 KNOWN_MESSAGE_TYPES: list[str] = [
     "hello",
     "state",
     "description",
     "candidate",
+    "job_init",
     "audio_eof",
     "checkpoint",
     "progress",

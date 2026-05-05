@@ -31,6 +31,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any, Callable
@@ -44,6 +45,9 @@ from transcribe_engine.protocol.messages import (
     TranscriptPayload,
 )
 from transcribe_engine.webrtc.chunker import PartialFileWriter, _validate_job_id
+
+# CR-02: valid lowercase hex SHA-256 (64 chars).
+_VALID_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +96,10 @@ class InboundJobHandler:
         self._temp_dir = temp_dir or Path(tempfile.gettempdir())
         self._pipeline_module = pipeline_module or _DefaultPipelineModule()
         self._writer: PartialFileWriter | None = None
+
+        # CR-02: SHA-256 of the source file bound to this job.
+        # Set on job_init; checked on resume_query.  None until job_init arrives.
+        self._job_sha256: str | None = None
 
         # CR-04: prevent double pipeline kick from duplicate audio_eof.
         self._eof_seen: bool = False
@@ -193,14 +201,50 @@ class InboundJobHandler:
 
         msg_type = msg.get("type")
 
-        if msg_type == "audio_eof":
+        if msg_type == "job_init":
+            self._handle_job_init(msg)
+        elif msg_type == "audio_eof":
             await self._handle_audio_eof()
         elif msg_type == "resume_query":
-            self._handle_resume_query()
+            self._handle_resume_query(msg)
         elif msg_type == "ping":
             self._safe_send(json.dumps({"type": "pong"}))
         else:
             log.warning("handler %s: unknown message type %r", self._job_id, msg_type)
+
+    def _handle_job_init(self, msg: dict) -> None:
+        """Process a job_init message and persist file-identity sidecar (CR-02).
+
+        The sidecar (<job_id>.meta.json) binds the job_id to the SHA-256 of
+        the source file.  On resume the client must echo the same sha256_hex;
+        a mismatch causes the engine to refuse the resume (return offset 0)
+        and delete the existing .partial so the client starts fresh.
+        """
+        sha256_hex = msg.get("sha256_hex", "")
+        if not isinstance(sha256_hex, str) or not _VALID_SHA256.fullmatch(sha256_hex):
+            log.warning(
+                "handler %s: job_init with invalid sha256_hex %r — ignoring",
+                self._job_id, sha256_hex,
+            )
+            return
+
+        self._job_sha256 = sha256_hex
+
+        # Persist to sidecar with mode 0o600 (atomic via os.open + O_CREAT).
+        sidecar = self._temp_dir / f"{self._job_id}.meta.json"
+        sidecar_data = json.dumps({
+            "job_id": self._job_id,
+            "sha256_hex": sha256_hex,
+            "total_bytes": msg.get("total_bytes"),
+        })
+        try:
+            fd = os.open(str(sidecar), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(sidecar_data)
+        except OSError as exc:
+            log.warning(
+                "handler %s: could not write meta sidecar: %s", self._job_id, exc
+            )
 
     async def _handle_audio_eof(self) -> None:
         """Finalize the .partial file and kick the pipeline.
@@ -248,12 +292,44 @@ class InboundJobHandler:
         await self._signaling.emit_state("transcribing")
         asyncio.ensure_future(self._run_pipeline(final_path))
 
-    def _handle_resume_query(self) -> None:
-        """Reply with the current confirmed byte offset (RTC-06 / T-08-07-08).
+    def _handle_resume_query(self, msg: dict) -> None:
+        """Reply with the current confirmed byte offset (RTC-06 / T-08-07-08 / CR-01/CR-02).
 
-        We only report what is on disk (CR-01).  Re-stat from disk when the
-        writer is None so we pick up the correct size after a crash-restart.
+        CR-02: verify the client's sha256_hex against the on-disk sidecar.
+        If they don't match (different file, or no sidecar), return offset=0
+        and delete the stale .partial so the client starts fresh.
+
+        CR-01: only report bytes that are durably on disk (fsynced boundary).
         """
+        # CR-02: extract and validate the client's sha256_hex.
+        client_sha256 = msg.get("sha256_hex", "")
+        sidecar = self._temp_dir / f"{self._job_id}.meta.json"
+
+        if sidecar.exists():
+            try:
+                sidecar_data = json.loads(sidecar.read_text())
+                stored_sha256 = sidecar_data.get("sha256_hex", "")
+            except (OSError, json.JSONDecodeError):
+                stored_sha256 = ""
+
+            if client_sha256 != stored_sha256:
+                log.warning(
+                    "handler %s: resume_query hash mismatch — client=%r stored=%r; "
+                    "deleting .partial and refusing resume (CR-02)",
+                    self._job_id, client_sha256[:16], stored_sha256[:16],
+                )
+                # Delete stale .partial so client restarts from byte 0.
+                partial_stale = self._temp_dir / f"{self._job_id}.partial"
+                partial_stale.unlink(missing_ok=True)
+                sidecar.unlink(missing_ok=True)
+                if self._writer is not None:
+                    self._writer.cleanup()
+                    self._writer = None
+                reply: ResumeStateMsg = {"type": "resume_state", "byte_offset": 0}
+                self._safe_send(json.dumps(reply))
+                return
+
+        # Hashes match (or no sidecar — legacy client or first connect).
         if self._writer is not None:
             # Writer live: current_offset() returns last fsynced boundary (CR-01).
             offset = self._writer.current_offset()
@@ -262,7 +338,7 @@ class InboundJobHandler:
             partial = self._temp_dir / f"{self._job_id}.partial"
             offset = partial.stat().st_size if partial.exists() else 0
 
-        reply: ResumeStateMsg = {"type": "resume_state", "byte_offset": offset}
+        reply = {"type": "resume_state", "byte_offset": offset}
         self._safe_send(json.dumps(reply))
 
     # -------------------------------------------------------------------------
@@ -347,6 +423,7 @@ class InboundJobHandler:
         Deletes:
           - audio_path (the finalized audio file, pipeline input)
           - the .partial sidecar if still present (resume-fallback cleanup)
+          - the .meta.json sidecar (CR-02 file-identity record)
         """
         if audio_path is not None:
             try:
@@ -361,6 +438,10 @@ class InboundJobHandler:
         else:
             partial = self._temp_dir / f"{self._job_id}.partial"
             partial.unlink(missing_ok=True)
+
+        # CR-02: clean up the file-identity sidecar.
+        sidecar = self._temp_dir / f"{self._job_id}.meta.json"
+        sidecar.unlink(missing_ok=True)
 
     # -------------------------------------------------------------------------
     # Helpers

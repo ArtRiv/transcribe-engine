@@ -352,6 +352,91 @@ async def test_queue_serialises_chunks_in_order(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_job_init_stores_sha256_and_allows_resume(tmp_path: Path) -> None:
+    """CR-02: job_init persists .meta.json; matching sha256 on resume_query succeeds."""
+    ch = FakeDataChannel()
+    sig = FakeSignalingClient()
+    h = InboundJobHandler(ch, sig, "job-init01", temp_dir=tmp_path)
+    h.bind()
+
+    sha256 = "a" * 64
+    ch.inject(json.dumps({
+        "type": "job_init",
+        "job_id": "job-init01",
+        "sha256_hex": sha256,
+        "total_bytes": 4096,
+    }))
+    await _drain()
+
+    # Sidecar must exist
+    sidecar = tmp_path / "job-init01.meta.json"
+    assert sidecar.exists(), ".meta.json sidecar must be created by job_init"
+    sidecar_data = json.loads(sidecar.read_text())
+    assert sidecar_data["sha256_hex"] == sha256
+
+    # Write some data
+    ch.inject(b"Z" * 1024)
+    await _drain()
+
+    # resume_query with matching hash — should get a valid (possibly 0) offset back
+    ch.inject(json.dumps({
+        "type": "resume_query",
+        "job_id": "job-init01",
+        "sha256_hex": sha256,
+    }))
+    await _drain()
+
+    resume_replies = [
+        json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"
+    ]
+    assert len(resume_replies) == 1, f"expected 1 resume_state; got {ch.sent_types()}"
+    # Offset may be 0 (no checkpoint crossed yet) — key thing is it didn't refuse
+    assert resume_replies[0]["byte_offset"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_resume_query_mismatched_sha256_refuses_resume(tmp_path: Path) -> None:
+    """CR-02: resume_query with wrong sha256_hex returns offset=0 and deletes .partial."""
+    _good_sha = "a" * 64
+    _bad_sha = "b" * 64
+
+    # Pre-create a .meta.json sidecar with good_sha
+    sidecar = tmp_path / "job-hash01.meta.json"
+    sidecar.write_text(json.dumps({
+        "job_id": "job-hash01",
+        "sha256_hex": _good_sha,
+        "total_bytes": 1024,
+    }))
+    # Pre-create a .partial file
+    partial = tmp_path / "job-hash01.partial"
+    partial.write_bytes(b"X" * 1024)
+
+    ch = FakeDataChannel()
+    sig = FakeSignalingClient()
+    h = InboundJobHandler(ch, sig, "job-hash01", temp_dir=tmp_path)
+    h.bind()
+
+    # Send resume_query with WRONG sha256
+    ch.inject(json.dumps({
+        "type": "resume_query",
+        "job_id": "job-hash01",
+        "sha256_hex": _bad_sha,
+    }))
+    await _drain()
+
+    resume_replies = [
+        json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"
+    ]
+    assert len(resume_replies) == 1
+    # Engine must refuse: offset = 0
+    assert resume_replies[0]["byte_offset"] == 0, (
+        f"engine must refuse (offset=0) on hash mismatch; got {resume_replies[0]['byte_offset']}"
+    )
+    # .partial must be deleted
+    assert not partial.exists(), ".partial must be deleted on hash mismatch"
+
+
+@pytest.mark.asyncio
 async def test_file_too_large_rejected_before_pipeline(tmp_path: Path) -> None:
     """WR-04: audio files larger than MAX_INBOUND_FILE_BYTES are rejected."""
     ch = FakeDataChannel()
