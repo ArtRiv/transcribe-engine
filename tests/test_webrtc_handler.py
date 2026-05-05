@@ -11,9 +11,12 @@ Coverage:
     - audio_eof triggers pipeline + result returned over channel
     - Pipeline failure sends ErrorMsg
     - pipeline error does NOT prevent state(idle) + cleanup (D-08)
-    - resume_query returns current byte offset
+    - resume_query returns current durable byte offset (CR-01)
     - Oversized chunk is dropped (T-08-07-01)
     - Browser-tab-closed: result send failure is swallowed (T-08-07-07)
+    - CR-04: duplicate audio_eof fires pipeline exactly once
+    - CR-05: consumer queue serialises messages in order (stress test)
+    - WR-04: oversized audio file rejected before pipeline kick
 """
 import asyncio
 import json
@@ -23,7 +26,7 @@ from typing import Any
 
 import pytest
 
-from transcribe_engine.webrtc.handler import InboundJobHandler
+from transcribe_engine.webrtc.handler import InboundJobHandler, MAX_INBOUND_FILE_BYTES
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
@@ -233,15 +236,22 @@ async def test_pipeline_failure_swallows_send_error(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_resume_query_returns_current_offset(tmp_path: Path) -> None:
-    """resume_query replies with the current .partial byte offset."""
+    """resume_query replies with the last durably-fsynced byte offset (CR-01).
+
+    Write 160 chunks of 64 KB = 10 MB to cross the default 10 MB checkpoint
+    boundary and trigger an fsync.  The resume reply must then report the
+    fsynced boundary (≥ 10 MB and a multiple of 10 MB).
+    """
+    _10MB = 10 * 1024 * 1024
     ch = FakeDataChannel()
     sig = FakeSignalingClient()
     h = InboundJobHandler(ch, sig, "job-resume", temp_dir=tmp_path)
     h.bind()
 
-    # Write 5 MB
+    # Write 160 * 64 KB = 10 MB — crosses the 10 MB checkpoint boundary.
+    # Drain after each chunk so the bounded queue (maxsize=64) never fills.
     chunk = b"F" * 65536
-    for _ in range(80):  # 80 * 64 KB = 5 MB
+    for _ in range(160):
         ch.inject(chunk)
         await _drain()
 
@@ -252,7 +262,13 @@ async def test_resume_query_returns_current_offset(tmp_path: Path) -> None:
         json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"
     ]
     assert len(resume_replies) == 1
-    assert resume_replies[0]["byte_offset"] == 80 * 65536
+    reported = resume_replies[0]["byte_offset"]
+    assert reported >= _10MB, (
+        f"resume offset must be >= 10 MB after writing 10 MB; got {reported}"
+    )
+    assert reported % _10MB == 0, (
+        f"must report a checkpoint boundary (multiple of 10 MB), got {reported}"
+    )
 
 
 @pytest.mark.asyncio
@@ -283,3 +299,86 @@ async def test_ping_replies_with_pong(tmp_path: Path) -> None:
     await _drain()
 
     assert "pong" in ch.sent_types(), "pong must be sent in response to ping"
+
+
+@pytest.mark.asyncio
+async def test_double_eof_kicks_pipeline_exactly_once(tmp_path: Path) -> None:
+    """CR-04: two audio_eof messages must NOT fire the pipeline twice."""
+    ch = FakeDataChannel()
+    sig = FakeSignalingClient()
+    mock_pl = MockPipeline()
+    h = InboundJobHandler(ch, sig, "job-double-eof", pipeline_module=mock_pl, temp_dir=tmp_path)
+    h.bind()
+
+    ch.inject(b"H" * 1024)
+    await _drain()
+
+    # Send audio_eof twice — both land in queue before consumer drains.
+    # The queue has capacity for 64 items; 2 JSON messages fit fine.
+    eof_msg = json.dumps({"type": "audio_eof", "total_bytes": 1024})
+    ch.inject(eof_msg)
+    ch.inject(eof_msg)
+    await _drain()
+
+    assert len(mock_pl.calls) == 1, (
+        f"pipeline must be called exactly once even with double EOF; "
+        f"got {len(mock_pl.calls)} calls"
+    )
+
+
+@pytest.mark.asyncio
+async def test_queue_serialises_chunks_in_order(tmp_path: Path) -> None:
+    """CR-05: 100 sequential chunks land in order via the consumer queue."""
+    ch = FakeDataChannel()
+    sig = FakeSignalingClient()
+    h = InboundJobHandler(ch, sig, "job-order", temp_dir=tmp_path)
+    h.bind()
+
+    # Inject 100 chunks of 1 byte each containing a sequential byte value.
+    # Drain periodically so the bounded queue never fills (maxsize=64).
+    for i in range(100):
+        ch.inject(bytes([i % 256]))
+        if i % 30 == 0:
+            await _drain()
+
+    await _drain()
+
+    partial = tmp_path / "job-order.partial"
+    assert partial.exists(), ".partial must exist after 100 chunks"
+    data = partial.read_bytes()
+    assert len(data) == 100, f"expected 100 bytes, got {len(data)}"
+    for i, b in enumerate(data):
+        assert b == i % 256, f"byte {i} is {b}, expected {i % 256} — chunks out of order"
+
+
+@pytest.mark.asyncio
+async def test_file_too_large_rejected_before_pipeline(tmp_path: Path) -> None:
+    """WR-04: audio files larger than MAX_INBOUND_FILE_BYTES are rejected."""
+    ch = FakeDataChannel()
+    sig = FakeSignalingClient()
+    mock_pl = MockPipeline()
+    h = InboundJobHandler(ch, sig, "job-toobig", pipeline_module=mock_pl, temp_dir=tmp_path)
+    h.bind()
+
+    # Create a fake finalised audio file that is 1 byte over the limit
+    audio_path = tmp_path / "job-toobig"
+    # Use a sparse file so we don't actually write GBs
+    with open(str(audio_path), "wb") as f:
+        f.seek(MAX_INBOUND_FILE_BYTES)  # seek to 5 GiB
+        f.write(b"\x00")               # write 1 byte → file is 5 GiB + 1 byte
+
+    # Manually trigger _run_pipeline with the oversized file
+    await h._run_pipeline(audio_path)
+
+    # Pipeline must NOT have been called
+    assert len(mock_pl.calls) == 0, "pipeline must not be called for oversized files"
+
+    # An error message must have been sent
+    errors = [m for m in ch.sent if json.loads(m).get("code") == "file_too_large"]
+    assert len(errors) == 1, f"expected file_too_large error; sent: {ch.sent_types()}"
+
+    # The oversized file must be deleted
+    assert not audio_path.exists(), "oversized audio file must be deleted"
+
+    # state(idle) must be emitted
+    assert "idle" in sig.states, "state(idle) must be emitted after rejection"

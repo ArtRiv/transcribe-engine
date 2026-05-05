@@ -14,8 +14,14 @@ Resume (RTC-06):
 Threat mitigations:
     T-08-07-01: assert len(message) <= 65536 for each binary chunk (drop + log)
     T-08-07-02: try/finally cleanup in _run_pipeline (deletes partial/final audio)
-    T-08-07-03: inbound chunk queue cap via _MAX_INBOUND_CHUNKS (defense-in-depth)
     T-08-07-06: pipeline stage exceptions caught; ErrorMsg sent back; state(idle)
+
+CR fixes applied in this module:
+    CR-03: job_id validated via _validate_job_id before any filesystem access
+    CR-04: asyncio.Lock + _eof_seen flag prevent double pipeline kick
+    CR-05: single consumer task + asyncio.Queue(maxsize=64) serialise all messages
+    WR-04: MAX_INBOUND_FILE_BYTES cap enforced before pipeline kick
+    WR-07: removed dead outer try/except around _safe_send (which already swallows)
 
 SEC-08: no supabase import.  No aiortc top-level import (lazy in peer.py).
 """
@@ -37,16 +43,20 @@ from transcribe_engine.protocol.messages import (
     ResultMsg,
     TranscriptPayload,
 )
-from transcribe_engine.webrtc.chunker import PartialFileWriter
+from transcribe_engine.webrtc.chunker import PartialFileWriter, _validate_job_id
 
 log = logging.getLogger(__name__)
 
-# T-08-07-03 defense-in-depth: drop binary chunks above this cap.
-# The frontend's backpressure should make this unreachable in practice.
-_MAX_INBOUND_CHUNKS: int = 16
-
 # Maximum binary frame size (T-08-07-01 — SCTP message-size invariant).
 _MAX_CHUNK_BYTES: int = 65_536
+
+# CR-05: bounded inbound queue.  If put_nowait raises QueueFull the sender
+# is misbehaving; log + close channel (back-pressure escape valve).
+_INBOUND_QUEUE_MAXSIZE: int = 64
+
+# WR-04: reject audio files larger than this before kicking the pipeline.
+# Mirror this constant on the frontend side: frontend/lib/webrtc/chunker.ts
+MAX_INBOUND_FILE_BYTES: int = 5 * 1024 * 1024 * 1024  # 5 GB
 
 
 class InboundJobHandler:
@@ -74,29 +84,81 @@ class InboundJobHandler:
         pipeline_module: Any = None,
         temp_dir: Path | None = None,
     ) -> None:
+        # CR-03: validate before any filesystem access.
+        _validate_job_id(job_id)
         self._channel = channel
         self._signaling = signaling_client
         self._job_id = job_id
         self._temp_dir = temp_dir or Path(tempfile.gettempdir())
         self._pipeline_module = pipeline_module or _DefaultPipelineModule()
         self._writer: PartialFileWriter | None = None
-        self._pending_chunks: int = 0  # T-08-07-03 counter
+
+        # CR-04: prevent double pipeline kick from duplicate audio_eof.
+        self._eof_seen: bool = False
+        self._eof_lock: asyncio.Lock = asyncio.Lock()
+
+        # CR-05: single consumer drains the inbound queue; on_message is non-blocking.
+        self._queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=_INBOUND_QUEUE_MAXSIZE)
+        self._consumer_task: asyncio.Task[None] | None = None
 
     # -------------------------------------------------------------------------
     # Public API
     # -------------------------------------------------------------------------
 
     def bind(self) -> None:
-        """Register @channel.on("message") to route inbound messages here."""
+        """Spawn the consumer task and register @channel.on("message")."""
+        # CR-05: one consumer task serialises all binary + control messages.
+        self._consumer_task = asyncio.ensure_future(self._consume())
         channel = self._channel
 
         @channel.on("message")
         def _on_message(message: Any) -> None:
-            # Dispatch synchronously; schedule coroutines via create_task.
-            if isinstance(message, bytes):
-                asyncio.ensure_future(self._handle_binary(message))
-            else:
-                asyncio.ensure_future(self._handle_json(message))
+            try:
+                self._queue.put_nowait(message)
+            except asyncio.QueueFull:
+                log.warning(
+                    "handler %s: inbound queue full (maxsize=%d) — dropping message "
+                    "and closing channel (sender misbehaving)",
+                    self._job_id, _INBOUND_QUEUE_MAXSIZE,
+                )
+                try:
+                    channel.close()
+                except Exception:
+                    pass
+
+    async def close(self) -> None:
+        """Cancel the consumer task (call from channel-close handler)."""
+        if self._consumer_task is not None:
+            self._consumer_task.cancel()
+            try:
+                await self._consumer_task
+            except asyncio.CancelledError:
+                pass
+            self._consumer_task = None
+
+    # -------------------------------------------------------------------------
+    # Consumer (CR-05)
+    # -------------------------------------------------------------------------
+
+    async def _consume(self) -> None:
+        """Drain the inbound queue one message at a time (in arrival order)."""
+        while True:
+            try:
+                message = await self._queue.get()
+            except asyncio.CancelledError:
+                return
+            try:
+                if isinstance(message, bytes):
+                    await self._handle_binary(message)
+                else:
+                    await self._handle_json(message)
+            except Exception as exc:
+                log.error(
+                    "handler %s: unhandled error in consumer: %s",
+                    self._job_id, exc, exc_info=True,
+                )
+            finally:
+                self._queue.task_done()
 
     # -------------------------------------------------------------------------
     # Internal handlers
@@ -112,22 +174,10 @@ class InboundJobHandler:
             )
             return
 
-        # T-08-07-03: drop if too many pending chunks (defense-in-depth)
-        if self._pending_chunks >= _MAX_INBOUND_CHUNKS:
-            log.warning(
-                "handler %s: dropping chunk — inbound queue cap (%d) reached (T-08-07-03)",
-                self._job_id, _MAX_INBOUND_CHUNKS,
-            )
-            return
-
         if self._writer is None:
             self._writer = PartialFileWriter(self._temp_dir, self._job_id)
 
-        self._pending_chunks += 1
-        try:
-            checkpoint_offset = self._writer.write(data)
-        finally:
-            self._pending_chunks -= 1
+        checkpoint_offset = self._writer.write(data)
 
         if checkpoint_offset is not None:
             msg: CheckpointMsg = {"type": "checkpoint", "byte_offset": checkpoint_offset}
@@ -153,7 +203,22 @@ class InboundJobHandler:
             log.warning("handler %s: unknown message type %r", self._job_id, msg_type)
 
     async def _handle_audio_eof(self) -> None:
-        """Finalize the .partial file and kick the pipeline."""
+        """Finalize the .partial file and kick the pipeline.
+
+        CR-04: protected by _eof_lock + _eof_seen flag — duplicate audio_eof
+        messages (network retransmit, malicious) are silently dropped after the
+        first one is processed.  The lock also serialises the EOF handler against
+        concurrent binary chunk writes from the consumer task.
+        """
+        async with self._eof_lock:
+            if self._eof_seen:
+                log.debug(
+                    "handler %s: duplicate audio_eof — ignored (CR-04)",
+                    self._job_id,
+                )
+                return
+            self._eof_seen = True
+
         if self._writer is None:
             log.error(
                 "handler %s: audio_eof received but no writer (no bytes received?)",
@@ -184,14 +249,18 @@ class InboundJobHandler:
         asyncio.ensure_future(self._run_pipeline(final_path))
 
     def _handle_resume_query(self) -> None:
-        """Reply with the current confirmed byte offset (RTC-06 / T-08-07-08)."""
-        offset = self._writer.current_offset() if self._writer else 0
+        """Reply with the current confirmed byte offset (RTC-06 / T-08-07-08).
 
-        # Also check for an existing .partial on disk for a previous writer
-        if self._writer is None:
+        We only report what is on disk (CR-01).  Re-stat from disk when the
+        writer is None so we pick up the correct size after a crash-restart.
+        """
+        if self._writer is not None:
+            # Writer live: current_offset() returns last fsynced boundary (CR-01).
+            offset = self._writer.current_offset()
+        else:
+            # Writer absent: check disk directly (clean state after restart).
             partial = self._temp_dir / f"{self._job_id}.partial"
-            if partial.exists():
-                offset = partial.stat().st_size
+            offset = partial.stat().st_size if partial.exists() else 0
 
         reply: ResumeStateMsg = {"type": "resume_state", "byte_offset": offset}
         self._safe_send(json.dumps(reply))
@@ -204,7 +273,32 @@ class InboundJobHandler:
         """Run the full pipeline and send result/error back over the channel.
 
         T-08-07-02: try/finally ensures cleanup() runs even if send() fails.
+        WR-04: reject audio files larger than MAX_INBOUND_FILE_BYTES before
+               kicking the pipeline (prevents disk exhaustion / DoS).
         """
+        # WR-04: size guard — check before any ffmpeg/whisper invocation.
+        try:
+            size = audio_path.stat().st_size
+        except OSError:
+            size = 0
+        if size > MAX_INBOUND_FILE_BYTES:
+            log.error(
+                "handler %s: audio file too large (%d bytes > %d) — aborting pipeline",
+                self._job_id, size, MAX_INBOUND_FILE_BYTES,
+            )
+            audio_path.unlink(missing_ok=True)
+            err: ErrorMsg = {
+                "type": "error",
+                "code": "file_too_large",
+                "message": "Audio file exceeds the maximum supported size.",
+            }
+            self._safe_send(json.dumps(err))
+            try:
+                await self._signaling.emit_state("idle")
+            except Exception:
+                pass
+            return
+
         try:
             await self._signaling.emit_state("loading_model")
 
@@ -229,20 +323,14 @@ class InboundJobHandler:
             log.error(
                 "handler %s: pipeline failed: %s", self._job_id, exc, exc_info=True
             )
-            err: ErrorMsg = {
+            err = {
                 "type": "error",
                 "code": "pipeline_failed",
                 # ASVS V7 — sanitized message, no stack trace
                 "message": "Transcription failed. Please try again.",
             }
-            # Swallow send errors here (browser-tab-closed case — T-08-07-07)
-            try:
-                self._safe_send(json.dumps(err))
-            except Exception as send_err:
-                log.debug(
-                    "handler %s: error send failed (channel closed?): %s",
-                    self._job_id, send_err,
-                )
+            # WR-07: _safe_send already swallows exceptions; no outer try needed.
+            self._safe_send(json.dumps(err))
 
         finally:
             # D-08: always emit idle + clean up audio file
