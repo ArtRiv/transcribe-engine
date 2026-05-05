@@ -96,29 +96,32 @@ async def add_remote_candidate(pc, candidate: dict) -> None:
         pc:        RTCPeerConnection
         candidate: Dict with key ``candidate`` (ICE candidate string) and
                    optional ``sdpMid``, ``sdpMLineIndex``.
-    """
-    from aiortc import RTCIceCandidate  # lazy
 
-    # aiortc expects candidate as RTCIceCandidate; parse from the SDP line.
+    WR-01 fix: parse the SDP candidate string via candidate_from_sdp() so all
+    fields (ip, port, foundation, priority, …) are populated from the actual
+    wire value.  Constructing RTCIceCandidate with placeholder zeros/empty
+    strings produces a candidate that points nowhere and silently fails ICE.
+    """
+    # aiortc's candidate_from_sdp parses the SDP candidate line into a
+    # fully-populated RTCIceCandidate dataclass.
     # The dict shape matches CandidateMsg.candidate from protocol/messages.py.
     raw = candidate.get("candidate", "")
     if not raw:
         # End-of-candidates signal — safe to ignore in aiortc.
         return
 
-    # aiortc parses candidates via RTCIceCandidate constructor.
-    # We build a minimal RTCIceCandidate; aiortc's addIceCandidate accepts it.
-    ice = RTCIceCandidate(
-        component=1,
-        foundation="",
-        ip="0.0.0.0",
-        port=0,
-        priority=0,
-        protocol="udp",
-        type="host",
-        sdpMid=candidate.get("sdpMid"),
-        sdpMLineIndex=candidate.get("sdpMLineIndex"),
-    )
+    try:
+        from aiortc.sdp import candidate_from_sdp  # lazy; stable aiortc internal
+        ice = candidate_from_sdp(raw)
+        ice.sdpMid = candidate.get("sdpMid")
+        ice.sdpMLineIndex = candidate.get("sdpMLineIndex")
+    except Exception as exc:
+        log.warning(
+            "add_remote_candidate: malformed candidate SDP %r — dropped (%s)",
+            raw[:80], exc,
+        )
+        return
+
     await pc.addIceCandidate(ice)
     log.debug("add_remote_candidate: added %s", raw[:60])
 

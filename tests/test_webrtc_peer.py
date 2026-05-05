@@ -84,3 +84,49 @@ async def test_close_does_not_raise() -> None:
     pc = await peer_module.create_peer_connection(turn_creds=None)
     # Should not raise
     await peer_module.close(pc)
+
+
+@pytest.mark.asyncio
+async def test_add_remote_candidate_parses_sdp_fields(tmp_path) -> None:
+    """WR-01: add_remote_candidate() parses real SDP fields, not placeholder zeros.
+
+    A valid ICE candidate string must produce an RTCIceCandidate with the
+    correct ip/port, NOT '0.0.0.0'/0.
+    """
+    from aiortc.sdp import candidate_from_sdp
+
+    # A representative SDP candidate string (realistic host candidate)
+    good_sdp = (
+        "candidate:3348148302 1 udp 2113937151 "
+        "192.168.1.100 56123 typ host generation 0"
+    )
+
+    # Verify candidate_from_sdp parses correctly (basis for add_remote_candidate fix)
+    ice = candidate_from_sdp(good_sdp)
+    assert ice.ip == "192.168.1.100", f"expected ip 192.168.1.100, got {ice.ip}"
+    assert ice.port == 56123, f"expected port 56123, got {ice.port}"
+    assert ice.ip != "0.0.0.0", "ip must not be the placeholder 0.0.0.0"
+    assert ice.port != 0, "port must not be the placeholder 0"
+
+
+@pytest.mark.asyncio
+async def test_add_remote_candidate_drops_malformed() -> None:
+    """WR-01: add_remote_candidate() drops a malformed SDP line without raising."""
+    pc = await peer_module.create_peer_connection(turn_creds=None)
+
+    # Should not raise — malformed SDP is logged and dropped
+    await peer_module.add_remote_candidate(pc, {"candidate": "not-a-valid-sdp-candidate"})
+
+    await peer_module.close(pc)
+
+
+@pytest.mark.asyncio
+async def test_add_remote_candidate_ignores_empty_candidate() -> None:
+    """End-of-candidates signal (empty candidate string) is silently ignored."""
+    pc = await peer_module.create_peer_connection(turn_creds=None)
+
+    # Should not raise
+    await peer_module.add_remote_candidate(pc, {"candidate": ""})
+    await peer_module.add_remote_candidate(pc, {})  # missing key
+
+    await peer_module.close(pc)
