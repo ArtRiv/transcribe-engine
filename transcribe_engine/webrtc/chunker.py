@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,23 @@ log = logging.getLogger(__name__)
 
 # Emit a checkpoint roughly every 10 MB (D-06 / RTC-06).
 _DEFAULT_CHECKPOINT_INTERVAL: int = 10 * 1024 * 1024
+
+# SEC: job_id is user-controlled (comes from the wire). Only alphanumeric,
+# hyphen, and underscore are accepted. Max 64 chars.  Any deviation is a
+# ValueError raised before any file operation.
+_VALID_JOB_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _validate_job_id(job_id: str) -> None:
+    """Raise ValueError if *job_id* could be used for path traversal.
+
+    Called at every entry-point that converts job_id → filesystem path.
+    Belt-and-suspenders: PartialFileWriter.path also checks resolve().
+    """
+    if not _VALID_JOB_ID.fullmatch(job_id):
+        raise ValueError(
+            f"invalid job_id {job_id!r}: must match ^[A-Za-z0-9_-]{{1,64}}$"
+        )
 
 
 class PartialFileWriter:
@@ -53,29 +71,42 @@ class PartialFileWriter:
         *,
         checkpoint_interval: int = _DEFAULT_CHECKPOINT_INTERVAL,
     ) -> None:
+        # SEC: validate before any filesystem access (CR-03 / path-traversal).
+        _validate_job_id(job_id)
         self._temp_dir = temp_dir
         self._job_id = job_id
         self._checkpoint_interval = checkpoint_interval
         self._finalized = False
 
         partial = self.path
-        if partial.exists():
-            start_offset = partial.stat().st_size
-            self._fp = partial.open("ab")
-            # Seek to end to ensure tell() returns the correct resuming offset.
-            self._fp.seek(0, 2)
-            log.debug(
-                "PartialFileWriter: resuming job_id=%s from offset=%d",
-                job_id,
-                start_offset,
+
+        # Belt-and-suspenders path-traversal check (CR-03).
+        resolved = partial.resolve()
+        temp_resolved = temp_dir.resolve()
+        if not resolved.is_relative_to(temp_resolved):
+            raise ValueError(
+                f"job_id {job_id!r} resolves outside temp_dir: {resolved}"
             )
-        else:
-            self._fp = partial.open("wb")
+
+        # WR-08: use O_WRONLY|O_CREAT|O_APPEND (atomic) instead of exists()+open().
+        # O_CREAT is atomic — avoids the TOCTOU race between exists() and open().
+        # Mode 0o600: user audio is sensitive material (project SEC guidelines).
+        fd = os.open(str(partial), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        self._fp = os.fdopen(fd, "ab")
+
+        start_offset = self._fp.seek(0, 2)  # seek to end; returns byte position
+        log.debug(
+            "PartialFileWriter: job_id=%s start_offset=%d",
+            job_id,
+            start_offset,
+        )
 
         # Track last checkpoint boundary so we emit at most once per interval.
         self._last_checkpoint_offset: int = (
-            (self.current_offset() // checkpoint_interval) * checkpoint_interval
+            (start_offset // checkpoint_interval) * checkpoint_interval
         )
+        # Track the last durably-fsynced byte offset (CR-01).
+        self._last_fsync_offset: int = start_offset
 
     # -------------------------------------------------------------------------
     # Properties
@@ -98,34 +129,43 @@ class PartialFileWriter:
     def write(self, chunk: bytes) -> Optional[int]:
         """Append *chunk* to the .partial file.
 
-        Returns the byte offset AFTER the write if a checkpoint boundary was
-        crossed, otherwise returns None.  The caller sends a CheckpointMsg
-        when the return value is not None.
+        Returns the DURABLE byte offset AFTER the write if a checkpoint
+        boundary was crossed, otherwise returns None.  The caller sends a
+        CheckpointMsg when the return value is not None.
 
         T-08-07-01 mitigation: caller must assert len(chunk) <= 65536 before
-        calling write(); this writer does not enforce it (separation of concerns).
-        T-08-07-02: bytes are flushed to OS buffer (not fsync'd) before the
-        checkpoint offset is reported.  The offset is the tell() after write —
-        consistent with what the OS has durably buffered under normal operation.
+        calling write(); this writer does not enforce it (separation of
+        concerns).
+
+        CR-01 mitigation: fsync() is called at EACH checkpoint boundary so the
+        reported offset is what is durably on disk.  Per-chunk fsync would tank
+        throughput; we amortize the cost over checkpoint_interval (default 10 MB).
+        After fsync() returns, _last_fsync_offset is updated.  current_offset()
+        returns _last_fsync_offset — the authoritative resume value.
         """
         if self._finalized:
             raise RuntimeError("write() called after finalize()")
         self._fp.write(chunk)
-        self._fp.flush()  # flush OS buffer before reporting checkpoint
+        self._fp.flush()
         offset = self._fp.tell()
 
         # Emit checkpoint when we cross a new multiple of checkpoint_interval.
         new_boundary = (offset // self._checkpoint_interval) * self._checkpoint_interval
         if new_boundary > self._last_checkpoint_offset and new_boundary > 0:
+            # CR-01: fsync BEFORE reporting offset — makes checkpoint durable.
+            os.fsync(self._fp.fileno())
+            self._last_fsync_offset = offset
             self._last_checkpoint_offset = new_boundary
             return offset
         return None
 
     def current_offset(self) -> int:
-        """Return current byte position (single source of truth for resume_query)."""
-        if self._fp.closed:
-            return 0
-        return self._fp.tell()
+        """Return the last durably-fsynced byte offset.
+
+        This is the authoritative value for resume_query (T-08-07-08 / CR-01).
+        We only report what is on disk, not what is in the OS page cache.
+        """
+        return self._last_fsync_offset
 
     # -------------------------------------------------------------------------
     # Finalize + cleanup
