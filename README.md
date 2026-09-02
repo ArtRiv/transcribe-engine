@@ -5,17 +5,17 @@ Bundles `whisper.cpp` (Vulkan / Metal / CPU) and `pyannote.audio` (CPU diarizati
 into a single tray-icon binary per OS — no Docker, no Python install, no GPU drivers
 to wrangle beyond what's already on your machine for games.
 
-Audio never leaves your machine. The engine pairs with the hosted webapp over WebRTC
-in a future release; for v0.1.0, the engine ships standalone (run binary → first-launch
-picker downloads model weights → engine sits in your menu bar).
+Audio never leaves your machine. Pairing with the hosted webapp over WebRTC is implemented
+on `main` and ships in the next release; the published binaries run standalone (run binary
+→ first-launch picker downloads model weights → engine sits in your menu bar).
 
 ## Privacy model
 
 | Holds                                         | Talks to                                            |
 |-----------------------------------------------|-----------------------------------------------------|
 | Local model weights (cached on disk)          | huggingface.co (one-time model download)            |
-| A local device keypair (Phase 8+)             | Your local browser (loopback HTTP, picker UI)       |
-| Optional HuggingFace token (stored mode 0600) | (Phase 8+) the Transcribe signaling function        |
+| A local device keypair                        | Your local browser (loopback HTTP, picker UI)       |
+| Optional HuggingFace token (stored mode 0600) | The Transcribe signaling function                   |
 
 The engine **never** holds:
 - Your webapp credentials (the hosted frontend owns those, not the engine)
@@ -25,7 +25,7 @@ The engine **never** holds:
 The engine is open-source MIT — the trust mechanism is "you can read the source and verify
 the SHA-256 of the binary you downloaded matches the one CI built."
 
-## Install (v0.1.0)
+## Install
 
 1. Download the binary for your OS from the [latest Release](https://github.com/artriv/transcribe-engine/releases/latest):
    - macOS Apple Silicon: `transcribe-engine-darwin-arm64`
@@ -107,7 +107,7 @@ Expected:
 ```
 Hosted Frontend (transcribe.fel.tec.br)
     |
-    |  WebRTC P2P — Phase 8 wires this; engine is paired once, then sits in tray
+    |  WebRTC P2P — engine is paired once, then sits in tray
     |
 transcribe-engine  (this repo)
     |
@@ -122,8 +122,8 @@ transcribe-engine  (this repo)
 ```
 
 The engine is intentionally minimal: a tray daemon that bundles whisper.cpp + pyannote,
-runs a localhost picker on first launch, and (in Phase 8) accepts inbound transcription jobs
-over WebRTC. It does not run an HTTP API. It does not hold any cloud credentials. It does not
+runs a localhost picker on first launch, and accepts inbound transcription jobs over
+WebRTC. It does not run an HTTP API. It does not hold any cloud credentials. It does not
 auto-update (manual download-and-replace for v0.1.x).
 
 ## License
@@ -132,9 +132,10 @@ MIT — see [LICENSE](./LICENSE).
 
 ## Status
 
-`v0.1.0` is the first published release: standalone tray daemon, first-launch model picker
-(Fast / Average / Best quality tiers), CPU-fallback GPU detection, and single PyInstaller
+`v0.1.1` is the latest published release: standalone tray daemon, first-launch model picker
+(Fast / Average / Best quality tiers), CPU-fallback GPU detection, and a single PyInstaller
 `--onefile` binary per OS.
 
-Pairing + WebRTC transport land in `v0.2.0` (tracked in the parent repo's
-[Phase 8 plan](https://github.com/artriv/transcribe)).
+Pairing and the WebRTC transport are implemented on `main` — device keypair, signaling
+client, chunked transport, and the resume path — and ship in the next release. They are not
+in the published binaries yet.
