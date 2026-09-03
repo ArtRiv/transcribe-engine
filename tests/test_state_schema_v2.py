@@ -6,6 +6,7 @@ Phase 8 Plan 05 bumps SCHEMA_VERSION from 1 → 2, adds a `Signaling` dataclass
 Migration runs lazily in `State.load()` — existing Phase 7 v1 installs upgrade
 silently on first boot.
 """
+
 import json
 from pathlib import Path
 
@@ -173,8 +174,8 @@ def test_load_ignores_unknown_fields_in_v2_file(tmp_path: Path) -> None:
         "signaling": {"supabase_url": None, "channel": None},
         "installed_models": [],
         "protocol_version": "1",
-        "deprecated_field": "some_value",   # unknown field
-        "future_key": 42,                   # unknown field
+        "deprecated_field": "some_value",  # unknown field
+        "future_key": 42,  # unknown field
     }
     v2_path.write_text(json.dumps(data))
     state = State.load(v2_path)  # must not raise TypeError

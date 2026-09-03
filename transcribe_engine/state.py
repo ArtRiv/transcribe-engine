@@ -9,6 +9,7 @@ keypair_path, last_signaling_url) all None. Phase 8 (Plan 05) bumps to v2:
 
 v0.1.0 (Phase 7) installs upgrade silently on first boot after v0.2.0.
 """
+
 import json
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
@@ -27,12 +28,12 @@ class Signaling:
 @dataclass
 class State:
     schema_version: int = SCHEMA_VERSION
-    paired_user_id: str | None = None       # Phase 8 fills
-    pubkey: str | None = None               # Phase 8 fills
-    keypair_path: str | None = None         # Phase 8 fills
+    paired_user_id: str | None = None  # Phase 8 fills
+    pubkey: str | None = None  # Phase 8 fills
+    keypair_path: str | None = None  # Phase 8 fills
     signaling: Signaling = field(default_factory=Signaling)
     installed_models: list[str] = field(default_factory=list)
-    protocol_version: str = "1"                # BYO-5 wire-format negotiation
+    protocol_version: str = "1"  # BYO-5 wire-format negotiation
 
     @classmethod
     def load(cls, path: Path) -> "State":

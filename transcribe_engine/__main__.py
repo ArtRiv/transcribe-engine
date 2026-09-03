@@ -7,6 +7,7 @@ State machine (D-08 + D-11):
 
 Phase 7 stubs the keypair / signaling slots in state.json; Phase 8 fills them.
 """
+
 import argparse
 import asyncio
 import logging
@@ -66,7 +67,7 @@ def main() -> int:
         log.info("no models installed; starting first-launch picker flow")
         server, port, picker_state = start_picker(
             gpu_label=gpu.label,
-            gpu_backend=gpu.backend,   # D-19 — drives per-GPU time-estimate scaling in picker
+            gpu_backend=gpu.backend,  # D-19 — drives per-GPU time-estimate scaling in picker
             app_state=state,
             state_path=state_path,
             hf_token_path=hf_token_path,
@@ -100,7 +101,7 @@ def main() -> int:
         log.info("Manage models... -> re-opening picker server")
         start_picker(
             gpu_label=gpu.label,
-            gpu_backend=gpu.backend,   # D-19 — drives per-GPU time-estimate scaling in picker
+            gpu_backend=gpu.backend,  # D-19 — drives per-GPU time-estimate scaling in picker
             app_state=state,
             state_path=state_path,
             hf_token_path=hf_token_path,

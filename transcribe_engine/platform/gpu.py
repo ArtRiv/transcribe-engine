@@ -4,6 +4,7 @@ Vulkan-first on Linux/Windows, Metal-first on macOS, CPU fallback always.
 NEVER raises — engine must boot on any user's machine. This is different
 from v1's `probe_vulkan_or_die` (single-host AMD; engine targets any user).
 """
+
 import asyncio
 import logging
 import re
@@ -25,7 +26,7 @@ Backend = Literal["vulkan", "metal", "cpu"]
 class GpuInfo:
     backend: Backend
     device_name: str
-    label: str   # tray status line suffix
+    label: str  # tray status line suffix
 
 
 _DEVICE_NAME_RE = re.compile(r"deviceName\s*=\s*(.+)")
@@ -50,8 +51,10 @@ async def _probe_vulkan() -> GpuInfo | None:
     binary = "vulkaninfo.exe" if sys.platform == "win32" else "vulkaninfo"
     try:
         proc = await asyncio.create_subprocess_exec(
-            binary, "--summary",
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            binary,
+            "--summary",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         stdout_b, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
         if proc.returncode != 0:
@@ -80,8 +83,13 @@ async def _probe_metal(whisper_cli: Path | None = None) -> GpuInfo | None:
         _make_silence_wav(silence)
         try:
             proc = await asyncio.create_subprocess_exec(
-                str(whisper_cli), "-f", str(silence), "-nt", "-otxt",
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                str(whisper_cli),
+                "-f",
+                str(silence),
+                "-nt",
+                "-otxt",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
             _, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=15)
             stderr = stderr_b.decode(errors="replace")

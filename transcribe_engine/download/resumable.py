@@ -3,6 +3,7 @@
 urllib.request + Range header + .partial sidecar + atomic rename + SHA-256 verify.
 Stdlib-only — avoids adding httpx weight to the bundle (RESEARCH "Anti-Patterns").
 """
+
 import hashlib
 import os
 import urllib.request

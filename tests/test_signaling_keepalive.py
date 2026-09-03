@@ -2,6 +2,7 @@
 
 Uses asyncio + monkeypatched time.monotonic to drive timing without real sleeps.
 """
+
 import asyncio
 
 import pytest
@@ -97,6 +98,7 @@ async def test_record_pong_prevents_dead_call():
 @pytest.mark.asyncio
 async def test_stop_cancels_task():
     """stop() terminates the background task cleanly."""
+
     async def send_ping():
         pass
 

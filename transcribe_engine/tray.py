@@ -3,6 +3,7 @@
 Cross-platform via pystray (auto-selects _xorg / _darwin / _win32 backend).
 PyInstaller --hidden-import is set per-OS in build script (R-05).
 """
+
 import os
 import subprocess
 import sys

@@ -4,6 +4,7 @@ Stdlib tomllib only — no third-party TOML lib needed (Python 3.11+).
 T-7-pickle-01 mitigation: stdlib tomllib is read-only; no eval/pickle on registry data.
 models.toml is shipped inside the read-only bundle root (R-04 — _MEIPASS).
 """
+
 import tomllib
 from pathlib import Path
 from typing import Any

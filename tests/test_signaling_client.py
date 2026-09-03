@@ -7,6 +7,7 @@ Supabase Realtime server.
 The fake broker is wired as a pytest fixture in this file (not conftest.py,
 since it is only needed here).
 """
+
 import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -386,6 +387,7 @@ async def test_client_reconnects_after_socket_error_with_backoff():
         async def connect(self) -> None:
             nonlocal connect_attempt
             import time
+
             connect_times.append(time.monotonic())
             connect_attempt += 1
             if connect_attempt <= 2:

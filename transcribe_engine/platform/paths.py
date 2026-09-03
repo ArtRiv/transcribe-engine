@@ -8,6 +8,7 @@
 NEVER derive state paths from __file__ (R-04 anti-pattern). In --onefile
 mode __file__ resolves to /tmp/_MEI*, vanishes on exit.
 """
+
 import sys
 from pathlib import Path
 

@@ -16,6 +16,7 @@ Verifies:
 
 No GPU required — MockPipeline records the final file size.
 """
+
 import asyncio
 import json
 from pathlib import Path
@@ -42,6 +43,7 @@ class FakeDataChannel:
         def decorator(fn):
             self._handlers.setdefault(event, []).append(fn)
             return fn
+
         return decorator
 
     def send(self, data: str) -> None:
@@ -116,9 +118,7 @@ async def test_resume_protocol_end_to_end(tmp_path: Path) -> None:
     # Confirm .partial exists with 5 MB
     partial = tmp_path / f"{job_id}.partial"
     assert partial.exists(), ".partial must survive channel close"
-    assert partial.stat().st_size == _5MB, (
-        f"expected 5 MB partial, got {partial.stat().st_size}"
-    )
+    assert partial.stat().st_size == _5MB, f"expected 5 MB partial, got {partial.stat().st_size}"
 
     # "Close" channel 1 — no audio_eof sent; channel object just abandoned
     # (the handler holds a reference but the .partial file is on disk)
@@ -133,16 +133,12 @@ async def test_resume_protocol_end_to_end(tmp_path: Path) -> None:
     await _drain()
 
     # Engine must reply with resume_state(byte_offset=5 MB)
-    resume_replies = [
-        json.loads(m) for m in ch2.sent
-        if json.loads(m)["type"] == "resume_state"
-    ]
+    resume_replies = [json.loads(m) for m in ch2.sent if json.loads(m)["type"] == "resume_state"]
     assert len(resume_replies) == 1, f"Expected 1 resume_state, got {resume_replies}"
 
     reported_offset = resume_replies[0]["byte_offset"]
     assert reported_offset == _5MB, (
-        f"T-08-07-08: engine must report exact .partial size={_5MB}, "
-        f"got {reported_offset}"
+        f"T-08-07-08: engine must report exact .partial size={_5MB}, got {reported_offset}"
     )
 
     # --- Phase 3: Resume from confirmed offset — send remaining 5 MB ---
@@ -162,9 +158,7 @@ async def test_resume_protocol_end_to_end(tmp_path: Path) -> None:
     await _drain()
 
     # --- Assertions ---
-    assert pl.file_size == _10MB, (
-        f"Pipeline must receive 10 MB file; got {pl.file_size}"
-    )
+    assert pl.file_size == _10MB, f"Pipeline must receive 10 MB file; got {pl.file_size}"
     assert "result" in ch2.sent_types(), "Result must be sent after pipeline completes"
     assert "idle" in sig.states, "state(idle) must be emitted after completion"
 
@@ -191,10 +185,7 @@ async def test_resume_query_with_no_writer_reads_disk(tmp_path: Path) -> None:
     ch.inject(json.dumps({"type": "resume_query", "job_id": job_id}))
     await _drain()
 
-    resume_replies = [
-        json.loads(m) for m in ch.sent
-        if json.loads(m)["type"] == "resume_state"
-    ]
+    resume_replies = [json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"]
     assert len(resume_replies) == 1
     assert resume_replies[0]["byte_offset"] == _5MB, (
         f"T-08-07-08: must read .partial size from disk; expected {_5MB}, "

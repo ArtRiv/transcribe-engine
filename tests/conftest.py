@@ -23,6 +23,7 @@ Spike test gating (Phase 8 Wave-0):
     the same file (test_aiortc_imports_in_source) must always run.
     Run the slow test with: RUN_SPIKE=1 uv run pytest -m slow tests/spike/
 """
+
 import os
 from pathlib import Path
 
@@ -79,21 +80,21 @@ def mock_whisper_cli(tmp_path: Path) -> Path:
     """
     cli = tmp_path / "whisper-cli"
     cli.write_text(
-        '#!/usr/bin/env bash\n'
-        '# Mock whisper-cli — used by tests under MOCK_ENGINE=1.\n'
-        '# Real wrapper is transcribe_engine/pipeline/transcribe.py.\n'
+        "#!/usr/bin/env bash\n"
+        "# Mock whisper-cli — used by tests under MOCK_ENGINE=1.\n"
+        "# Real wrapper is transcribe_engine/pipeline/transcribe.py.\n"
         'OUT=""\n'
-        'while [[ $# -gt 0 ]]; do\n'
+        "while [[ $# -gt 0 ]]; do\n"
         '  case "$1" in\n'
         '    --output-file) OUT="$2"; shift 2;;\n'
-        '    *) shift;;\n'
-        '  esac\n'
-        'done\n'
+        "    *) shift;;\n"
+        "  esac\n"
+        "done\n"
         'if [[ -n "$OUT" ]]; then\n'
         "  cat > \"${OUT}.json\" <<'EOF'\n"
         '{"systeminfo":"mock","model":{"type":"mock"},"params":{},"result":{"language":"en"},"transcription":[]}\n'
-        'EOF\n'
-        'fi\n'
+        "EOF\n"
+        "fi\n"
     )
     cli.chmod(0o755)
     return cli

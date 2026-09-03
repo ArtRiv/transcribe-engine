@@ -3,6 +3,7 @@
 Tests cover: fresh download, SHA-256 mismatch, resume-after-disconnect, progress callback.
 All tests use a real ThreadingHTTPServer with Range support (no mocking of urllib internals).
 """
+
 import hashlib
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,7 +31,7 @@ class _RangeHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(content)))
             self.send_header(
                 "Content-Range",
-                f"bytes {start}-{len(FIXTURE_BYTES)-1}/{len(FIXTURE_BYTES)}",
+                f"bytes {start}-{len(FIXTURE_BYTES) - 1}/{len(FIXTURE_BYTES)}",
             )
             self.end_headers()
             self.wfile.write(content)
@@ -86,9 +87,7 @@ def test_progress_callback_invoked(http_server, tmp_path):
     def on_progress(done, total):
         progress_events.append((done, total))
 
-    download_resumable(
-        http_server, dest, FIXTURE_SHA256, chunk_size=8192, on_progress=on_progress
-    )
+    download_resumable(http_server, dest, FIXTURE_SHA256, chunk_size=8192, on_progress=on_progress)
     assert len(progress_events) >= 1
     # Final event reaches the total
     assert progress_events[-1][0] == len(FIXTURE_BYTES)

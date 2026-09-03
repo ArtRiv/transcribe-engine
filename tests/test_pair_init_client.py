@@ -9,6 +9,7 @@ of urllib internals. Tests cover:
   - Only urllib.request is used (no httpx / requests / aiohttp)
   - Default timeout is 10 s
 """
+
 import json
 import threading
 import time

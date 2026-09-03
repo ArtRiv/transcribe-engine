@@ -3,6 +3,7 @@
 Tray menu "View logs" opens this file via the OS default text viewer.
 NOT JSON — D-21 reasoning is "non-developer can scan."
 """
+
 import logging
 import re
 from logging.handlers import RotatingFileHandler
@@ -32,10 +33,12 @@ def setup_logging() -> Path:
     can pass it to the tray menu (D-09 'View logs')."""
     log_path = log_dir() / "transcribe-engine.log"
     handler = RotatingFileHandler(log_path, maxBytes=2_000_000, backupCount=3)
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
     handler.addFilter(_RedactSecretsFilter())
     logging.basicConfig(level=logging.INFO, handlers=[handler])
     return log_path

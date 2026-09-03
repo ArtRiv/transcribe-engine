@@ -25,6 +25,7 @@ CR fixes applied in this module:
 
 SEC-08: no supabase import.  No aiortc top-level import (lazy in peer.py).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -128,7 +129,8 @@ class InboundJobHandler:
                 log.warning(
                     "handler %s: inbound queue full (maxsize=%d) — dropping message "
                     "and closing channel (sender misbehaving)",
-                    self._job_id, _INBOUND_QUEUE_MAXSIZE,
+                    self._job_id,
+                    _INBOUND_QUEUE_MAXSIZE,
                 )
                 try:
                     channel.close()
@@ -164,7 +166,9 @@ class InboundJobHandler:
             except Exception as exc:
                 log.error(
                     "handler %s: unhandled error in consumer: %s",
-                    self._job_id, exc, exc_info=True,
+                    self._job_id,
+                    exc,
+                    exc_info=True,
                 )
             finally:
                 self._queue.task_done()
@@ -179,7 +183,9 @@ class InboundJobHandler:
         if len(data) > _MAX_CHUNK_BYTES:
             log.warning(
                 "handler %s: dropping oversized chunk (%d bytes > %d) — T-08-07-01",
-                self._job_id, len(data), _MAX_CHUNK_BYTES,
+                self._job_id,
+                len(data),
+                _MAX_CHUNK_BYTES,
             )
             return
 
@@ -225,7 +231,8 @@ class InboundJobHandler:
         if not isinstance(sha256_hex, str) or not _VALID_SHA256.fullmatch(sha256_hex):
             log.warning(
                 "handler %s: job_init with invalid sha256_hex %r — ignoring",
-                self._job_id, sha256_hex,
+                self._job_id,
+                sha256_hex,
             )
             return
 
@@ -233,19 +240,19 @@ class InboundJobHandler:
 
         # Persist to sidecar with mode 0o600 (atomic via os.open + O_CREAT).
         sidecar = self._temp_dir / f"{self._job_id}.meta.json"
-        sidecar_data = json.dumps({
-            "job_id": self._job_id,
-            "sha256_hex": sha256_hex,
-            "total_bytes": msg.get("total_bytes"),
-        })
+        sidecar_data = json.dumps(
+            {
+                "job_id": self._job_id,
+                "sha256_hex": sha256_hex,
+                "total_bytes": msg.get("total_bytes"),
+            }
+        )
         try:
             fd = os.open(str(sidecar), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f:
                 f.write(sidecar_data)
         except OSError as exc:
-            log.warning(
-                "handler %s: could not write meta sidecar: %s", self._job_id, exc
-            )
+            log.warning("handler %s: could not write meta sidecar: %s", self._job_id, exc)
 
     async def _handle_audio_eof(self) -> None:
         """Finalize the .partial file and kick the pipeline.
@@ -317,7 +324,9 @@ class InboundJobHandler:
                 log.warning(
                     "handler %s: resume_query hash mismatch — client=%r stored=%r; "
                     "deleting .partial and refusing resume (CR-02)",
-                    self._job_id, client_sha256[:16], stored_sha256[:16],
+                    self._job_id,
+                    client_sha256[:16],
+                    stored_sha256[:16],
                 )
                 # Delete stale .partial so client restarts from byte 0.
                 partial_stale = self._temp_dir / f"{self._job_id}.partial"
@@ -361,7 +370,9 @@ class InboundJobHandler:
         if size > MAX_INBOUND_FILE_BYTES:
             log.error(
                 "handler %s: audio file too large (%d bytes > %d) — aborting pipeline",
-                self._job_id, size, MAX_INBOUND_FILE_BYTES,
+                self._job_id,
+                size,
+                MAX_INBOUND_FILE_BYTES,
             )
             audio_path.unlink(missing_ok=True)
             err: ErrorMsg = {
@@ -397,9 +408,7 @@ class InboundJobHandler:
             self._safe_send(json.dumps(result_msg))
 
         except Exception as exc:
-            log.error(
-                "handler %s: pipeline failed: %s", self._job_id, exc, exc_info=True
-            )
+            log.error("handler %s: pipeline failed: %s", self._job_id, exc, exc_info=True)
             err = {
                 "type": "error",
                 "code": "pipeline_failed",
@@ -459,7 +468,8 @@ class InboundJobHandler:
         except Exception as exc:
             log.debug(
                 "handler %s: channel.send() failed (channel closed?): %s",
-                self._job_id, exc,
+                self._job_id,
+                exc,
             )
 
 
@@ -467,6 +477,7 @@ class InboundJobHandler:
 # Default pipeline module — wraps the real Phase 7 pipeline stages.
 # Under MOCK_ENGINE=1 (test env) returns a stub payload without GPU.
 # ---------------------------------------------------------------------------
+
 
 class _DefaultPipelineModule:
     """Thin shim that wraps the real pipeline under normal conditions.

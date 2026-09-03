@@ -42,9 +42,7 @@ def test_realtime_py_no_native_extensions() -> None:
 
     pkg_dir = Path(spec.origin).parent
     native_exts = (
-        list(pkg_dir.rglob("*.so"))
-        + list(pkg_dir.rglob("*.dylib"))
-        + list(pkg_dir.rglob("*.pyd"))
+        list(pkg_dir.rglob("*.so")) + list(pkg_dir.rglob("*.dylib")) + list(pkg_dir.rglob("*.pyd"))
     )
     assert native_exts == [], (
         f"realtime package contains native extensions (assumption A3 violated): {native_exts}\n"

@@ -38,15 +38,17 @@ def test_save_hf_token_creates_file_with_content(tmp_path):
 @pytest.mark.skipif(__import__("sys").platform == "win32", reason="chmod is Unix-only")
 def test_save_hf_token_sets_mode_0600_on_unix(tmp_path):
     import stat
+
     path = tmp_path / "hf_token"
     save_hf_token("hf_TestTokenAaBbCcDdEe1234", path)
     mode = stat.S_IMODE(path.stat().st_mode)
-    assert mode == 0o600   # T-7-03 mitigation
+    assert mode == 0o600  # T-7-03 mitigation
 
 
 # D-19 — _format_time_estimate behavior
 def test_format_time_estimate_vulkan_average_tier():
     from transcribe_engine.picker_server import _format_time_estimate
+
     # Average tier RTF=0.30 on Vulkan (mult=1.0) -> 30 * 0.30 * 1.0 = 9 min
     s = _format_time_estimate(0.30, "vulkan", "AMD Radeon RX 6600 (Vulkan)")
     assert "~9 min" in s
@@ -56,6 +58,7 @@ def test_format_time_estimate_vulkan_average_tier():
 
 def test_format_time_estimate_cpu_is_much_slower():
     from transcribe_engine.picker_server import _format_time_estimate
+
     v = _format_time_estimate(0.30, "vulkan", "GPU")
     c = _format_time_estimate(0.30, "cpu", "CPU")
     # CPU multiplier is 8x — string must reflect that
@@ -66,6 +69,7 @@ def test_format_time_estimate_cpu_is_much_slower():
 
 def test_format_time_estimate_metal_between_vulkan_and_cpu():
     from transcribe_engine.picker_server import _format_time_estimate
+
     v = int(_format_time_estimate(0.55, "vulkan", "G").split("~")[1].split(" min")[0])
     m = int(_format_time_estimate(0.55, "metal", "G").split("~")[1].split(" min")[0])
     c = int(_format_time_estimate(0.55, "cpu", "G").split("~")[1].split(" min")[0])
@@ -74,6 +78,7 @@ def test_format_time_estimate_metal_between_vulkan_and_cpu():
 
 def test_format_time_estimate_unknown_backend_treats_as_cpu():
     from transcribe_engine.picker_server import _format_time_estimate
+
     s = _format_time_estimate(0.30, "rocm-not-yet-supported", "Foo")
     # unknown backend -> conservative (cpu multiplier)
     assert int(s.split("~")[1].split(" min")[0]) >= 30 * 0.30 * 7

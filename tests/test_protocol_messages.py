@@ -8,6 +8,7 @@ Verifies:
 - parse_wire rejects unknown types
 - Module uses only stdlib (json + typing)
 """
+
 import json
 
 import pytest
