@@ -1,13 +1,8 @@
 """Smoke tests for picker_server."""
-import re
-import threading
-import urllib.request
-from pathlib import Path
 
 import pytest
 
-from transcribe_engine.picker_server import (_HF_TOKEN_RE, find_free_port,
-                                               save_hf_token)
+from transcribe_engine.picker_server import _HF_TOKEN_RE, find_free_port, save_hf_token
 
 
 def test_find_free_port_returns_high_port():

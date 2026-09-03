@@ -19,6 +19,7 @@ from transcribe_engine.picker_server import start_picker
 from transcribe_engine.platform.gpu import detect_gpu
 from transcribe_engine.platform.paths import config_dir
 from transcribe_engine.state import State
+
 # NOTE: `tray` is imported lazily inside main() — its `pystray` dependency
 # initializes the platform GUI backend at import time (Xlib.Display() on Linux),
 # which fails on headless systems (CI, SSH without X-forwarding) and would

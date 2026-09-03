@@ -202,7 +202,7 @@ async def transcribe_subprocess(
             proc.terminate()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=10)
-            except (asyncio.TimeoutError, ProcessLookupError):
+            except (TimeoutError, ProcessLookupError):
                 proc.kill()
                 await proc.wait()
 

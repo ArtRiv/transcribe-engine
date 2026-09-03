@@ -20,13 +20,12 @@ Coverage:
 """
 import asyncio
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from transcribe_engine.webrtc.handler import InboundJobHandler, MAX_INBOUND_FILE_BYTES
+from transcribe_engine.webrtc.handler import MAX_INBOUND_FILE_BYTES, InboundJobHandler
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes

@@ -3,11 +3,8 @@
 Uses asyncio + monkeypatched time.monotonic to drive timing without real sleeps.
 """
 import asyncio
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
 from transcribe_engine.signaling.keepalive import Keepalive
 
@@ -16,7 +13,6 @@ from transcribe_engine.signaling.keepalive import Keepalive
 async def test_send_ping_called_multiple_times():
     """send_ping is called once per ping_interval elapsed."""
     ping_count = 0
-    pong_received_times = []
 
     async def send_ping():
         nonlocal ping_count

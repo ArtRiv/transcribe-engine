@@ -33,15 +33,16 @@ import logging
 import os
 import re
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from transcribe_engine.protocol.messages import (
     CheckpointMsg,
     ErrorMsg,
     ProgressMsg,
-    ResumeStateMsg,
     ResultMsg,
+    ResumeStateMsg,
     TranscriptPayload,
 )
 from transcribe_engine.webrtc.chunker import PartialFileWriter, _validate_job_id
@@ -489,13 +490,14 @@ class _DefaultPipelineModule:
 
         # Real pipeline — Phase 7 modules.
         # Import lazily (heavy deps: torch, pyannote, whisper.cpp subprocess).
-        from transcribe_engine.pipeline.normalize import normalize_to_wav
-        from transcribe_engine.pipeline.lifecycle import normalized_wav_path
-        from transcribe_engine.pipeline.transcribe import transcribe_subprocess
-        from transcribe_engine.pipeline.diarize import load_pyannote, run_diarize
-        from transcribe_engine.pipeline.merge import merge_to_payload
-        from transcribe_engine.platform.paths import bundle_root, cache_dir
         import sys
+
+        from transcribe_engine.pipeline.diarize import load_pyannote, run_diarize
+        from transcribe_engine.pipeline.lifecycle import normalized_wav_path
+        from transcribe_engine.pipeline.merge import merge_to_payload
+        from transcribe_engine.pipeline.normalize import normalize_to_wav
+        from transcribe_engine.pipeline.transcribe import transcribe_subprocess
+        from transcribe_engine.platform.paths import bundle_root, cache_dir
 
         on_progress("normalize", 0.0)
         wav = normalized_wav_path(audio_path)

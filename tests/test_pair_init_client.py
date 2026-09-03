@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import pytest
+from nacl.exceptions import BadSignatureError
 from nacl.signing import SigningKey
 
 from transcribe_engine.pairing.pair_init import (
@@ -23,7 +24,6 @@ from transcribe_engine.pairing.pair_init import (
     PairInitError,
     pair_init_post,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake server infrastructure
@@ -177,7 +177,7 @@ def test_pair_init_signed_message_includes_gpu_and_engine_version(fake_server: s
 
     # Swapping gpu invalidates the signature (proves binding)
     tampered_message = f"pair-init:{code}:{nonce}:{issued_at}:EVIL GPU:{engine_version}".encode()
-    with pytest.raises(Exception):  # nacl.exceptions.BadSignatureError
+    with pytest.raises(BadSignatureError):
         vk.verify(tampered_message, sig_bytes)
 
 

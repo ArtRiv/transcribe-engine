@@ -16,10 +16,10 @@ Verifies:
 
 No GPU required — MockPipeline records the final file size.
 """
+import asyncio
 import json
 from pathlib import Path
 
-import asyncio
 import pytest
 
 from transcribe_engine.webrtc.handler import InboundJobHandler

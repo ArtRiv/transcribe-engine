@@ -3,7 +3,6 @@
 Validates the reconnect curve: 1, 2, 4, 8, 16, 30, 30, 30, ...
 with ±20% jitter applied to each value.
 """
-import pytest
 
 from transcribe_engine.signaling.reconnect import reconnect_delays
 

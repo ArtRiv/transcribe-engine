@@ -5,12 +5,10 @@ All tests run in <1s (no real subprocess execution).
 """
 import asyncio
 import sys
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from transcribe_engine.platform import gpu
 from transcribe_engine.platform.gpu import GpuInfo, detect_gpu
 
 

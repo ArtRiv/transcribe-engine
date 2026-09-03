@@ -13,7 +13,6 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +125,7 @@ class PartialFileWriter:
     # Core write + checkpoint
     # -------------------------------------------------------------------------
 
-    def write(self, chunk: bytes) -> Optional[int]:
+    def write(self, chunk: bytes) -> int | None:
         """Append *chunk* to the .partial file.
 
         Returns the DURABLE byte offset AFTER the write if a checkpoint
@@ -219,7 +218,7 @@ class PartialFileWriter:
     # Context manager
     # -------------------------------------------------------------------------
 
-    def __enter__(self) -> "PartialFileWriter":
+    def __enter__(self) -> PartialFileWriter:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

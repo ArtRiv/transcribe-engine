@@ -19,7 +19,6 @@ Implementation:
 - Connect + read timeout both default to 10.0 s
 """
 import json
-import socket
 import urllib.error
 import urllib.request
 from typing import Final
@@ -101,7 +100,7 @@ def pair_init_post(
             nonce_data: dict = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
         _handle_http_error(exc)
-    except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise PairInitError(f"nonce fetch failed: {exc}") from exc
 
     # --- WR-10: validate nonce response shape ---
@@ -151,7 +150,7 @@ def pair_init_post(
             resp.read()  # consume body; 2xx is success
     except urllib.error.HTTPError as exc:
         _handle_http_error(exc)
-    except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise PairInitError(f"pair-init POST failed: {exc}") from exc
 
 

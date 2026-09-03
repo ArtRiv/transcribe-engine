@@ -13,9 +13,9 @@ identical KNOWN_MESSAGE_TYPES list. A cross-repo set-equality test in
 frontend/tests/lib/webrtc/protocol.test.ts catches drift (T-08-05-02).
 """
 import json
-from typing import Literal, Optional, Union
+from typing import Literal, NotRequired
 
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 # Wire protocol version — bumped when the message shape changes in a
 # backwards-incompatible way. Both engine and frontend must agree on this.
@@ -33,8 +33,8 @@ class SdpDescription(TypedDict):
 
 class IceCandidate(TypedDict):
     candidate: str
-    sdpMid: NotRequired[Optional[str]]
-    sdpMLineIndex: NotRequired[Optional[int]]
+    sdpMid: NotRequired[str | None]
+    sdpMLineIndex: NotRequired[int | None]
 
 
 class TranscriptWord(TypedDict):
@@ -164,22 +164,22 @@ class ErrorMsg(TypedDict):
 # Discriminating union
 # ---------------------------------------------------------------------------
 
-WireMessage = Union[
-    HelloMsg,
-    StateMsg,
-    OfferMsg,      # AnswerMsg is structurally identical; differentiate by sdp.type
-    CandidateMsg,
-    JobInitMsg,
-    AudioEofMsg,
-    CheckpointMsg,
-    ProgressMsg,
-    ResultMsg,
-    ResumeQueryMsg,
-    ResumeStateMsg,
-    PingMsg,
-    PongMsg,
-    ErrorMsg,
-]
+WireMessage = (
+    HelloMsg
+    | StateMsg
+    | OfferMsg  # AnswerMsg is structurally identical; differentiate by sdp.type
+    | CandidateMsg
+    | JobInitMsg
+    | AudioEofMsg
+    | CheckpointMsg
+    | ProgressMsg
+    | ResultMsg
+    | ResumeQueryMsg
+    | ResumeStateMsg
+    | PingMsg
+    | PongMsg
+    | ErrorMsg
+)
 
 # 14 distinct `type` discriminator strings (was 13 before CR-02 added job_init).
 # OfferMsg and AnswerMsg share `type: 'description'` and are disambiguated by

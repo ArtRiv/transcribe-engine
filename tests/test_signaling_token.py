@@ -3,10 +3,8 @@
 Uses a ThreadingHTTPServer fixture (same pattern as test_resumable.py) to
 simulate the Vercel /api/signal-token nonce + POST endpoints.
 """
-import base64
 import json
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -18,7 +16,6 @@ from transcribe_engine.signaling.token import (
     SignalingTokenError,
     fetch_signaling_token,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake signal-token server

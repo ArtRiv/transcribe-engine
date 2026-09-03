@@ -10,14 +10,14 @@ import re
 import socket
 import threading
 import webbrowser
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from transcribe_engine.download.registry import get_tier, list_tiers
 from transcribe_engine.download.resumable import download_resumable
-from transcribe_engine.platform.paths import bundle_root, cache_dir, config_dir
+from transcribe_engine.platform.paths import bundle_root, cache_dir
 from transcribe_engine.state import State
 
 log = logging.getLogger(__name__)
@@ -31,9 +31,9 @@ class PickerState:
     state: Literal["idle", "downloading", "verifying", "done", "error"] = "idle"
     bytes_done: int = 0
     bytes_total: int = 0
-    eta_seconds: Optional[int] = None
-    error: Optional[str] = None
-    selected_tier: Optional[str] = None
+    eta_seconds: int | None = None
+    error: str | None = None
+    selected_tier: str | None = None
 
 
 def find_free_port() -> int:

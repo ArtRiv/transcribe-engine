@@ -6,12 +6,10 @@ All tests use a real ThreadingHTTPServer with Range support (no mocking of urlli
 import hashlib
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 import pytest
 
 from transcribe_engine.download.resumable import download_resumable
-
 
 # 64KB fixture content; deterministic per byte for hash verification
 FIXTURE_BYTES = bytes((i % 256) for i in range(65536))
