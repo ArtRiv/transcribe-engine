@@ -1,4 +1,5 @@
 """Tests for R-04 path discipline — platform/paths.py."""
+
 import sys
 from pathlib import Path
 

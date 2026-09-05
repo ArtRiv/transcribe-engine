@@ -6,6 +6,7 @@ mode 0o600, sign arbitrary messages, expose the pubkey as 64-char lowercase hex.
 Negative tests are mandatory (T-08-03-03 mitigation):
   - sign-then-verify with wrong VerifyKey must fail.
 """
+
 import os
 from pathlib import Path
 

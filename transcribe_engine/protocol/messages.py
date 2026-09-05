@@ -12,10 +12,11 @@ The frontend mirror is frontend/lib/webrtc/protocol.ts — both files export an
 identical KNOWN_MESSAGE_TYPES list. A cross-repo set-equality test in
 frontend/tests/lib/webrtc/protocol.test.ts catches drift (T-08-05-02).
 """
-import json
-from typing import Literal, Optional, Union
 
-from typing_extensions import NotRequired, TypedDict
+import json
+from typing import Literal, NotRequired
+
+from typing_extensions import TypedDict
 
 # Wire protocol version — bumped when the message shape changes in a
 # backwards-incompatible way. Both engine and frontend must agree on this.
@@ -33,19 +34,19 @@ class SdpDescription(TypedDict):
 
 class IceCandidate(TypedDict):
     candidate: str
-    sdpMid: NotRequired[Optional[str]]
-    sdpMLineIndex: NotRequired[Optional[int]]
+    sdpMid: NotRequired[str | None]
+    sdpMLineIndex: NotRequired[int | None]
 
 
 class TranscriptWord(TypedDict):
-    w: str       # word text
-    s: float     # start seconds
-    e: float     # end seconds
+    w: str  # word text
+    s: float  # start seconds
+    e: float  # end seconds
     p: NotRequired[float]  # probability (optional)
 
 
 class TranscriptSegment(TypedDict):
-    id: str      # "seg_NNNN" zero-padded
+    id: str  # "seg_NNNN" zero-padded
     start: float
     end: float
     speaker: str  # references Speaker.id
@@ -54,14 +55,15 @@ class TranscriptSegment(TypedDict):
 
 
 class TranscriptSpeaker(TypedDict):
-    id: str     # e.g. "S0", "S1"
+    id: str  # e.g. "S0", "S1"
     label: str  # human-renamed; "Speaker 1" default
 
 
 class TranscriptPayload(TypedDict):
     """v1 transcript schema — matches frontend/lib/mock/data.ts exactly (D-22)."""
+
     version: Literal[1]
-    language: str           # BCP-47 short, e.g. "en"
+    language: str  # BCP-47 short, e.g. "en"
     duration_sec: float
     speakers: list[TranscriptSpeaker]
     segments: list[TranscriptSegment]
@@ -74,9 +76,9 @@ class TranscriptPayload(TypedDict):
 
 class HelloMsg(TypedDict):
     type: Literal["hello"]
-    version: str            # engine semver e.g. "0.2.0"
-    protocol_version: str   # wire protocol version e.g. "1"
-    gpu: str                # GPU label e.g. "RX 6600 (Vulkan)"
+    version: str  # engine semver e.g. "0.2.0"
+    protocol_version: str  # wire protocol version e.g. "1"
+    gpu: str  # GPU label e.g. "RX 6600 (Vulkan)"
 
 
 class StateMsg(TypedDict):
@@ -86,12 +88,14 @@ class StateMsg(TypedDict):
 
 class OfferMsg(TypedDict):
     """SDP offer — disambiguated from AnswerMsg by sdp.type == 'offer'."""
+
     type: Literal["description"]
     sdp: SdpDescription
 
 
 class AnswerMsg(TypedDict):
     """SDP answer — disambiguated from OfferMsg by sdp.type == 'answer'."""
+
     type: Literal["description"]
     sdp: SdpDescription
 
@@ -129,16 +133,17 @@ class JobInitMsg(TypedDict):
     detect cross-file splicing on resume.  The engine persists this to a
     sidecar file (<job_id>.meta.json) alongside the .partial.
     """
+
     type: Literal["job_init"]
     job_id: str
-    sha256_hex: str   # lowercase hex SHA-256 of the full source file
+    sha256_hex: str  # lowercase hex SHA-256 of the full source file
     total_bytes: int  # expected size in bytes (informational; not enforced)
 
 
 class ResumeQueryMsg(TypedDict):
     type: Literal["resume_query"]
     job_id: str
-    sha256_hex: str   # CR-02: must match the sidecar on the engine side
+    sha256_hex: str  # CR-02: must match the sidecar on the engine side
 
 
 class ResumeStateMsg(TypedDict):
@@ -164,22 +169,22 @@ class ErrorMsg(TypedDict):
 # Discriminating union
 # ---------------------------------------------------------------------------
 
-WireMessage = Union[
-    HelloMsg,
-    StateMsg,
-    OfferMsg,      # AnswerMsg is structurally identical; differentiate by sdp.type
-    CandidateMsg,
-    JobInitMsg,
-    AudioEofMsg,
-    CheckpointMsg,
-    ProgressMsg,
-    ResultMsg,
-    ResumeQueryMsg,
-    ResumeStateMsg,
-    PingMsg,
-    PongMsg,
-    ErrorMsg,
-]
+WireMessage = (
+    HelloMsg
+    | StateMsg
+    | OfferMsg  # AnswerMsg is structurally identical; differentiate by sdp.type
+    | CandidateMsg
+    | JobInitMsg
+    | AudioEofMsg
+    | CheckpointMsg
+    | ProgressMsg
+    | ResultMsg
+    | ResumeQueryMsg
+    | ResumeStateMsg
+    | PingMsg
+    | PongMsg
+    | ErrorMsg
+)
 
 # 14 distinct `type` discriminator strings (was 13 before CR-02 added job_init).
 # OfferMsg and AnswerMsg share `type: 'description'` and are disambiguated by
@@ -224,13 +229,10 @@ def parse_wire(raw: str | bytes) -> WireMessage:
     msg_type = data["type"]
     if msg_type not in KNOWN_MESSAGE_TYPES:
         raise ValueError(
-            f"Unknown wire message type {msg_type!r}. "
-            f"Known types: {KNOWN_MESSAGE_TYPES}"
+            f"Unknown wire message type {msg_type!r}. Known types: {KNOWN_MESSAGE_TYPES}"
         )
     if msg_type == "hello":
         pv = data.get("protocol_version")
         if pv != PROTOCOL_VERSION:
-            raise ValueError(
-                f"Protocol version mismatch: peer={pv!r} local={PROTOCOL_VERSION!r}"
-            )
+            raise ValueError(f"Protocol version mismatch: peer={pv!r} local={PROTOCOL_VERSION!r}")
     return data  # type: ignore[return-value]  # structural TypedDict — runtime check via 'type'

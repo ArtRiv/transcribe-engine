@@ -70,6 +70,7 @@ def release_models(backend: str) -> None:
         if backend == "metal":
             # torch.mps.empty_cache() exists on torch>=1.12 with MPS support
             import torch
+
             if hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
                 torch.mps.empty_cache()
         # Vulkan: no torch interface; rely on whisper.cpp's own cleanup between subprocess calls.

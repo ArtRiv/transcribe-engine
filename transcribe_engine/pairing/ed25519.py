@@ -17,6 +17,7 @@ The State object is mutated in place (sets `state.keypair_path` and
 `state.pubkey`). The CALLER is responsible for `state.save(state_path)`
 afterward — Plan 05 owns the schema bump and pairing-flow lifecycle.
 """
+
 import os
 from pathlib import Path
 

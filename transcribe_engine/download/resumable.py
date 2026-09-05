@@ -3,11 +3,12 @@
 urllib.request + Range header + .partial sidecar + atomic rename + SHA-256 verify.
 Stdlib-only — avoids adding httpx weight to the bundle (RESEARCH "Anti-Patterns").
 """
+
 import hashlib
 import os
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 
 def download_resumable(
@@ -16,7 +17,7 @@ def download_resumable(
     expected_sha256: str,
     *,
     chunk_size: int = 1024 * 1024,
-    on_progress: Optional[Callable[[int, int], None]] = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> None:
     """Resumable HTTP download. Re-entrant on disconnect.
 

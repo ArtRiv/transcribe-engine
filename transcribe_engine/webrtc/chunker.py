@@ -7,13 +7,13 @@ cleanup and hash-verify semantics vs the model-download path.
 SEC-08: no supabase import; T-08-07-02 mitigation: cleanup() always runs
 even on failure (caller uses context manager or explicit finally).
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -33,9 +33,7 @@ def _validate_job_id(job_id: str) -> None:
     Belt-and-suspenders: PartialFileWriter.path also checks resolve().
     """
     if not _VALID_JOB_ID.fullmatch(job_id):
-        raise ValueError(
-            f"invalid job_id {job_id!r}: must match ^[A-Za-z0-9_-]{{1,64}}$"
-        )
+        raise ValueError(f"invalid job_id {job_id!r}: must match ^[A-Za-z0-9_-]{{1,64}}$")
 
 
 class PartialFileWriter:
@@ -84,9 +82,7 @@ class PartialFileWriter:
         resolved = partial.resolve()
         temp_resolved = temp_dir.resolve()
         if not resolved.is_relative_to(temp_resolved):
-            raise ValueError(
-                f"job_id {job_id!r} resolves outside temp_dir: {resolved}"
-            )
+            raise ValueError(f"job_id {job_id!r} resolves outside temp_dir: {resolved}")
 
         # WR-08: use O_WRONLY|O_CREAT|O_APPEND (atomic) instead of exists()+open().
         # O_CREAT is atomic — avoids the TOCTOU race between exists() and open().
@@ -103,8 +99,8 @@ class PartialFileWriter:
 
         # Track last checkpoint boundary so we emit at most once per interval.
         self._last_checkpoint_offset: int = (
-            (start_offset // checkpoint_interval) * checkpoint_interval
-        )
+            start_offset // checkpoint_interval
+        ) * checkpoint_interval
         # Track the last durably-fsynced byte offset (CR-01).
         self._last_fsync_offset: int = start_offset
 
@@ -126,7 +122,7 @@ class PartialFileWriter:
     # Core write + checkpoint
     # -------------------------------------------------------------------------
 
-    def write(self, chunk: bytes) -> Optional[int]:
+    def write(self, chunk: bytes) -> int | None:
         """Append *chunk* to the .partial file.
 
         Returns the DURABLE byte offset AFTER the write if a checkpoint
@@ -219,7 +215,7 @@ class PartialFileWriter:
     # Context manager
     # -------------------------------------------------------------------------
 
-    def __enter__(self) -> "PartialFileWriter":
+    def __enter__(self) -> PartialFileWriter:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

@@ -11,6 +11,7 @@ beyond infeasible.
 
 RNG: `secrets.choice` (cryptographic) — NOT `random.choices`.
 """
+
 import secrets
 
 CROCKFORD_BASE32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"  # omits I, L, O, U

@@ -3,10 +3,9 @@
 Uses a ThreadingHTTPServer fixture (same pattern as test_resumable.py) to
 simulate the Vercel /api/signal-token nonce + POST endpoints.
 """
-import base64
+
 import json
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -18,7 +17,6 @@ from transcribe_engine.signaling.token import (
     SignalingTokenError,
     fetch_signaling_token,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake signal-token server
@@ -50,9 +48,7 @@ class _SignalTokenHandler(BaseHTTPRequestHandler):
                 self.send_response(self.nonce_status)
                 self.end_headers()
                 return
-            body = json.dumps(
-                {"nonce": _FAKE_NONCE, "issued_at": _FAKE_ISSUED_AT}
-            ).encode()
+            body = json.dumps({"nonce": _FAKE_NONCE, "issued_at": _FAKE_ISSUED_AT}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -155,6 +151,7 @@ def test_fetch_signaling_token_sends_signed_payload(signal_token_server):
     expected_msg = f"signal-token:{nonce}:{issued_at}".encode()
 
     from nacl.signing import VerifyKey
+
     vk = VerifyKey(pubkey_bytes)
     # Should not raise — valid signature over the expected message template
     vk.verify(expected_msg, sig_bytes)

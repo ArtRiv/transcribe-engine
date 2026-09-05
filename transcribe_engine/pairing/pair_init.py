@@ -18,8 +18,8 @@ Implementation:
 - No retry inside this function — the engine state machine drives retries
 - Connect + read timeout both default to 10.0 s
 """
+
 import json
-import socket
 import urllib.error
 import urllib.request
 from typing import Final
@@ -101,7 +101,7 @@ def pair_init_post(
             nonce_data: dict = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
         _handle_http_error(exc)
-    except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise PairInitError(f"nonce fetch failed: {exc}") from exc
 
     # --- WR-10: validate nonce response shape ---
@@ -117,9 +117,7 @@ def pair_init_post(
     # --- WR-09: issued_at must be int (matches nonce-cache.ts Date.now()) ---
     issued_at_raw = nonce_data["issued_at"]
     if not isinstance(issued_at_raw, int):
-        raise PairInitError(
-            f"nonce issued_at must be int, got {type(issued_at_raw).__name__}"
-        )
+        raise PairInitError(f"nonce issued_at must be int, got {type(issued_at_raw).__name__}")
     issued_at: int = issued_at_raw
 
     # --- Step 2: build signed message (B-02 locked template) ---
@@ -151,7 +149,7 @@ def pair_init_post(
             resp.read()  # consume body; 2xx is success
     except urllib.error.HTTPError as exc:
         _handle_http_error(exc)
-    except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise PairInitError(f"pair-init POST failed: {exc}") from exc
 
 
@@ -169,9 +167,5 @@ def _handle_http_error(exc: urllib.error.HTTPError) -> None:
         error_code = str(exc.code)
 
     if exc.code == 409:
-        raise PairCodeConflictError(
-            f"Pairing code conflict (HTTP 409): {error_code}"
-        ) from exc
-    raise PairInitError(
-        f"pair-init failed (HTTP {exc.code}): {error_code}"
-    ) from exc
+        raise PairCodeConflictError(f"Pairing code conflict (HTTP 409): {error_code}") from exc
+    raise PairInitError(f"pair-init failed (HTTP {exc.code}): {error_code}") from exc

@@ -9,6 +9,7 @@ Tests use real aiortc (in-process, no actual network) to validate:
 Marked @pytest.mark.slow for the accept_offer test because aiortc DTLS
 setup can take a few hundred ms.
 """
+
 import pytest
 
 from transcribe_engine.webrtc import peer as peer_module
@@ -69,9 +70,7 @@ async def test_accept_offer_returns_answer_with_correct_type() -> None:
     answerer = await peer_module.create_peer_connection(turn_creds=None)
     answer_dict = await peer_module.accept_offer(answerer, offer_dict)
 
-    assert answer_dict["type"] == "answer", (
-        f"Expected type='answer', got {answer_dict['type']!r}"
-    )
+    assert answer_dict["type"] == "answer", f"Expected type='answer', got {answer_dict['type']!r}"
     assert len(answer_dict["sdp"]) > 0, "SDP string must not be empty"
 
     await peer_module.close(offerer)
@@ -96,10 +95,7 @@ async def test_add_remote_candidate_parses_sdp_fields(tmp_path) -> None:
     from aiortc.sdp import candidate_from_sdp
 
     # A representative SDP candidate string (realistic host candidate)
-    good_sdp = (
-        "candidate:3348148302 1 udp 2113937151 "
-        "192.168.1.100 56123 typ host generation 0"
-    )
+    good_sdp = "candidate:3348148302 1 udp 2113937151 192.168.1.100 56123 typ host generation 0"
 
     # Verify candidate_from_sdp parses correctly (basis for add_remote_candidate fix)
     ice = candidate_from_sdp(good_sdp)

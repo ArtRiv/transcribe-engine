@@ -3,12 +3,13 @@
 Cross-platform via pystray (auto-selects _xorg / _darwin / _win32 backend).
 PyInstaller --hidden-import is set per-OS in build script (R-05).
 """
+
 import os
 import subprocess
 import sys
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from PIL import Image, ImageDraw
 from pystray import Icon, Menu, MenuItem

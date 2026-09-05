@@ -3,6 +3,7 @@
 Plan 08-03 D-03: 8-char pairing code with 40 bits of entropy, formatted as XXXX-XXXX,
 sampled from CROCKFORD_BASE32 (omits I, L, O, U) using `secrets.choice`.
 """
+
 import re
 
 from transcribe_engine.pairing.code import CROCKFORD_BASE32, generate_pairing_code

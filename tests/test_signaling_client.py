@@ -7,8 +7,8 @@ Supabase Realtime server.
 The fake broker is wired as a pytest fixture in this file (not conftest.py,
 since it is only needed here).
 """
+
 import asyncio
-import dataclasses
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,15 +17,10 @@ from nacl.signing import SigningKey
 
 from transcribe_engine.protocol.messages import (
     PROTOCOL_VERSION,
-    CandidateMsg,
-    HelloMsg,
-    OfferMsg,
-    ResumeQueryMsg,
 )
 from transcribe_engine.signaling.client import EngineSignalingClient, UnpairedExit
 from transcribe_engine.signaling.token import EngineUnpairedError, SignalingToken
 from transcribe_engine.state import Signaling, State
-
 
 # ---------------------------------------------------------------------------
 # Fake Realtime broker
@@ -392,6 +387,7 @@ async def test_client_reconnects_after_socket_error_with_backoff():
         async def connect(self) -> None:
             nonlocal connect_attempt
             import time
+
             connect_times.append(time.monotonic())
             connect_attempt += 1
             if connect_attempt <= 2:

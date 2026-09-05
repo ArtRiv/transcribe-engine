@@ -18,15 +18,15 @@ Coverage:
     - CR-05: consumer queue serialises messages in order (stress test)
     - WR-04: oversized audio file rejected before pipeline kick
 """
+
 import asyncio
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from transcribe_engine.webrtc.handler import InboundJobHandler, MAX_INBOUND_FILE_BYTES
+from transcribe_engine.webrtc.handler import MAX_INBOUND_FILE_BYTES, InboundJobHandler
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
@@ -45,9 +45,11 @@ class FakeDataChannel:
 
     def on(self, event: str) -> Any:
         """Decorator registering a handler for *event*."""
+
         def decorator(fn: Any) -> Any:
             self._handlers.setdefault(event, []).append(fn)
             return fn
+
         return decorator
 
     def send(self, data: str) -> None:
@@ -113,6 +115,7 @@ class MockPipeline:
 # ---------------------------------------------------------------------------
 # Async helper to flush create_task() coroutines
 # ---------------------------------------------------------------------------
+
 
 async def _drain() -> None:
     """Yield control so all pending asyncio tasks run."""
@@ -210,8 +213,10 @@ async def test_pipeline_failure_sends_error_and_idle(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_pipeline_failure_swallows_send_error(tmp_path: Path) -> None:
     """If channel.send() raises during error reply, cleanup still runs."""
+
     class FailOnSendChannel(FakeDataChannel):
         _fail_count = 0
+
         def send(self, data: str) -> None:
             self._fail_count += 1
             if self._fail_count > 1:
@@ -258,14 +263,10 @@ async def test_resume_query_returns_current_offset(tmp_path: Path) -> None:
     ch.inject(json.dumps({"type": "resume_query", "job_id": "job-resume"}))
     await _drain()
 
-    resume_replies = [
-        json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"
-    ]
+    resume_replies = [json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"]
     assert len(resume_replies) == 1
     reported = resume_replies[0]["byte_offset"]
-    assert reported >= _10MB, (
-        f"resume offset must be >= 10 MB after writing 10 MB; got {reported}"
-    )
+    assert reported >= _10MB, f"resume offset must be >= 10 MB after writing 10 MB; got {reported}"
     assert reported % _10MB == 0, (
         f"must report a checkpoint boundary (multiple of 10 MB), got {reported}"
     )
@@ -321,8 +322,7 @@ async def test_double_eof_kicks_pipeline_exactly_once(tmp_path: Path) -> None:
     await _drain()
 
     assert len(mock_pl.calls) == 1, (
-        f"pipeline must be called exactly once even with double EOF; "
-        f"got {len(mock_pl.calls)} calls"
+        f"pipeline must be called exactly once even with double EOF; got {len(mock_pl.calls)} calls"
     )
 
 
@@ -360,12 +360,16 @@ async def test_job_init_stores_sha256_and_allows_resume(tmp_path: Path) -> None:
     h.bind()
 
     sha256 = "a" * 64
-    ch.inject(json.dumps({
-        "type": "job_init",
-        "job_id": "job-init01",
-        "sha256_hex": sha256,
-        "total_bytes": 4096,
-    }))
+    ch.inject(
+        json.dumps(
+            {
+                "type": "job_init",
+                "job_id": "job-init01",
+                "sha256_hex": sha256,
+                "total_bytes": 4096,
+            }
+        )
+    )
     await _drain()
 
     # Sidecar must exist
@@ -379,16 +383,18 @@ async def test_job_init_stores_sha256_and_allows_resume(tmp_path: Path) -> None:
     await _drain()
 
     # resume_query with matching hash — should get a valid (possibly 0) offset back
-    ch.inject(json.dumps({
-        "type": "resume_query",
-        "job_id": "job-init01",
-        "sha256_hex": sha256,
-    }))
+    ch.inject(
+        json.dumps(
+            {
+                "type": "resume_query",
+                "job_id": "job-init01",
+                "sha256_hex": sha256,
+            }
+        )
+    )
     await _drain()
 
-    resume_replies = [
-        json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"
-    ]
+    resume_replies = [json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"]
     assert len(resume_replies) == 1, f"expected 1 resume_state; got {ch.sent_types()}"
     # Offset may be 0 (no checkpoint crossed yet) — key thing is it didn't refuse
     assert resume_replies[0]["byte_offset"] >= 0
@@ -402,11 +408,15 @@ async def test_resume_query_mismatched_sha256_refuses_resume(tmp_path: Path) -> 
 
     # Pre-create a .meta.json sidecar with good_sha
     sidecar = tmp_path / "job-hash01.meta.json"
-    sidecar.write_text(json.dumps({
-        "job_id": "job-hash01",
-        "sha256_hex": _good_sha,
-        "total_bytes": 1024,
-    }))
+    sidecar.write_text(
+        json.dumps(
+            {
+                "job_id": "job-hash01",
+                "sha256_hex": _good_sha,
+                "total_bytes": 1024,
+            }
+        )
+    )
     # Pre-create a .partial file
     partial = tmp_path / "job-hash01.partial"
     partial.write_bytes(b"X" * 1024)
@@ -417,16 +427,18 @@ async def test_resume_query_mismatched_sha256_refuses_resume(tmp_path: Path) -> 
     h.bind()
 
     # Send resume_query with WRONG sha256
-    ch.inject(json.dumps({
-        "type": "resume_query",
-        "job_id": "job-hash01",
-        "sha256_hex": _bad_sha,
-    }))
+    ch.inject(
+        json.dumps(
+            {
+                "type": "resume_query",
+                "job_id": "job-hash01",
+                "sha256_hex": _bad_sha,
+            }
+        )
+    )
     await _drain()
 
-    resume_replies = [
-        json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"
-    ]
+    resume_replies = [json.loads(m) for m in ch.sent if json.loads(m)["type"] == "resume_state"]
     assert len(resume_replies) == 1
     # Engine must refuse: offset = 0
     assert resume_replies[0]["byte_offset"] == 0, (
@@ -450,7 +462,7 @@ async def test_file_too_large_rejected_before_pipeline(tmp_path: Path) -> None:
     # Use a sparse file so we don't actually write GBs
     with open(str(audio_path), "wb") as f:
         f.seek(MAX_INBOUND_FILE_BYTES)  # seek to 5 GiB
-        f.write(b"\x00")               # write 1 byte → file is 5 GiB + 1 byte
+        f.write(b"\x00")  # write 1 byte → file is 5 GiB + 1 byte
 
     # Manually trigger _run_pipeline with the oversized file
     await h._run_pipeline(audio_path)

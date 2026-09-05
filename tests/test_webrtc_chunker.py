@@ -12,9 +12,10 @@ Coverage:
     - Atomic rename on finalize
     - Cleanup removes .partial on failure
 """
+
 import os
 from pathlib import Path
-from unittest.mock import patch, call
+from unittest.mock import patch
 
 import pytest
 
@@ -171,10 +172,10 @@ def test_validate_job_id_rejects_traversal() -> None:
         "foo/bar",
         "foo\\bar",
         "foo\x00bar",
-        "a" * 65,          # > 64 chars
-        "",                # empty
-        "foo bar",         # space
-        "foo%2ebar",       # URL encoding
+        "a" * 65,  # > 64 chars
+        "",  # empty
+        "foo bar",  # space
+        "foo%2ebar",  # URL encoding
     ]
     for bad in bad_ids:
         with pytest.raises(ValueError, match="invalid job_id"):
@@ -187,8 +188,8 @@ def test_validate_job_id_accepts_valid() -> None:
         "abc123",
         "user-abc123def456",
         "A_B-C",
-        "a" * 64,          # exactly 64 chars
-        "a",               # 1 char
+        "a" * 64,  # exactly 64 chars
+        "a",  # 1 char
     ]
     for good in good_ids:
         _validate_job_id(good)  # must not raise
@@ -246,6 +247,7 @@ def test_writer_peer_module_lazy_import() -> None:
     """aiortc must NOT be imported at module top-level in peer.py (startup speed)."""
     import ast
     from pathlib import Path as P
+
     peer_path = P(__file__).parent.parent / "transcribe_engine" / "webrtc" / "peer.py"
     tree = ast.parse(peer_path.read_text(), filename=str(peer_path))
     for node in ast.walk(tree):
@@ -255,10 +257,7 @@ def test_writer_peer_module_lazy_import() -> None:
             # of the module body.
             pass
     # Check that no top-level import of aiortc exists
-    module_body_imports = [
-        n for n in tree.body
-        if isinstance(n, (ast.Import, ast.ImportFrom))
-    ]
+    module_body_imports = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
     for node in module_body_imports:
         if isinstance(node, ast.Import):
             for alias in node.names:

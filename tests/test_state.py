@@ -4,6 +4,7 @@ Updated in Plan 08-05 to match the v2 schema: `last_signaling_url` is replaced
 by `signaling: Signaling` + `protocol_version`. The v1 carry-forward fields
 (paired_user_id, pubkey, keypair_path, installed_models) are unchanged.
 """
+
 from pathlib import Path
 
 from transcribe_engine.state import SCHEMA_VERSION, Signaling, State

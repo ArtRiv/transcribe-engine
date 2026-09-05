@@ -16,6 +16,7 @@ SEC-08: no supabase import; no banned HTTP frameworks.
 T-08-07-04: DTLS fingerprint exchange happens inside aiortc SDP; this
 module does not need to handle it manually.
 """
+
 from __future__ import annotations
 
 import logging
@@ -112,13 +113,15 @@ async def add_remote_candidate(pc, candidate: dict) -> None:
 
     try:
         from aiortc.sdp import candidate_from_sdp  # lazy; stable aiortc internal
+
         ice = candidate_from_sdp(raw)
         ice.sdpMid = candidate.get("sdpMid")
         ice.sdpMLineIndex = candidate.get("sdpMLineIndex")
     except Exception as exc:
         log.warning(
             "add_remote_candidate: malformed candidate SDP %r — dropped (%s)",
-            raw[:80], exc,
+            raw[:80],
+            exc,
         )
         return
 

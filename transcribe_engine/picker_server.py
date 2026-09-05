@@ -3,6 +3,7 @@
 Stdlib ThreadingHTTPServer only — no FastAPI/Flask (D-08 single binary discipline).
 Bound to 127.0.0.1 (T-7-04); random free port (D-23).
 """
+
 import json
 import logging
 import os
@@ -10,14 +11,14 @@ import re
 import socket
 import threading
 import webbrowser
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from transcribe_engine.download.registry import get_tier, list_tiers
 from transcribe_engine.download.resumable import download_resumable
-from transcribe_engine.platform.paths import bundle_root, cache_dir, config_dir
+from transcribe_engine.platform.paths import bundle_root, cache_dir
 from transcribe_engine.state import State
 
 log = logging.getLogger(__name__)
@@ -28,18 +29,19 @@ _HF_TOKEN_RE = re.compile(r"^hf_[A-Za-z0-9]{20,}$")  # V5 input validation
 @dataclass
 class PickerState:
     """Polled by progress.html every 500ms (RESEARCH §Pattern 4)."""
+
     state: Literal["idle", "downloading", "verifying", "done", "error"] = "idle"
     bytes_done: int = 0
     bytes_total: int = 0
-    eta_seconds: Optional[int] = None
-    error: Optional[str] = None
-    selected_tier: Optional[str] = None
+    eta_seconds: int | None = None
+    error: str | None = None
+    selected_tier: str | None = None
 
 
 def find_free_port() -> int:
     """Random free port via OS assignment (D-23)."""
     with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))   # 127.0.0.1 ONLY (T-7-04 mitigation)
+        s.bind(("127.0.0.1", 0))  # 127.0.0.1 ONLY (T-7-04 mitigation)
         return s.getsockname()[1]
 
 
@@ -61,9 +63,9 @@ def save_hf_token(token: str, path: Path) -> None:
 # Picker tier card displays "~Xmin for a 30-min recording (your <gpu_label>)".
 # Numbers are deliberately rough — header copy uses "~" prefix.
 _GPU_CLASS_MULTIPLIER = {
-    "vulkan": 1.0,   # reference class
-    "metal":  1.2,   # ~20% slower than reference Vulkan on whisper.cpp (rough)
-    "cpu":    8.0,   # CPU fallback is ~8x slower than reference GPU class
+    "vulkan": 1.0,  # reference class
+    "metal": 1.2,  # ~20% slower than reference Vulkan on whisper.cpp (rough)
+    "cpu": 8.0,  # CPU fallback is ~8x slower than reference GPU class
 }
 
 
@@ -95,13 +97,21 @@ def _render_tier_cards(gpu_backend: str, gpu_label: str) -> str:
             f'  <div class="tier-meta">~{size_gb:.1f} GB · {tier["filename"]}</div>\n'
             f'  <div class="tier-time">{time_est}</div>\n'
             f'  <div class="tier-desc">{tier["description"]}</div>\n'
-            f'</div>'
+            f"</div>"
         )
     return "\n".join(cards)
 
 
-def _make_handler(*, gpu_label: str, gpu_backend: str, hf_token_path: Path, picker_state: PickerState,
-                  app_state: State, state_path: Path, server_port_holder: dict):
+def _make_handler(
+    *,
+    gpu_label: str,
+    gpu_backend: str,
+    hf_token_path: Path,
+    picker_state: PickerState,
+    app_state: State,
+    state_path: Path,
+    server_port_holder: dict,
+):
     """Closure-based handler factory — captures runtime context the request handler needs."""
 
     class Handler(BaseHTTPRequestHandler):
@@ -156,12 +166,12 @@ def _make_handler(*, gpu_label: str, gpu_backend: str, hf_token_path: Path, pick
                 handoff = (
                     '<!doctype html><html><head><meta charset="utf-8">'
                     '<title>Engine ready</title><link rel="stylesheet" href="/style.css"></head>'
-                    '<body><h1>Engine ready</h1>'
+                    "<body><h1>Engine ready</h1>"
                     '<p class="subtitle">Models downloaded. The engine is sitting in your menu bar.</p>'
-                    '<p>Next: head to the Transcribe website and pair this engine with your account. '
-                    '(Pairing UI ships in Phase 8.)</p>'
+                    "<p>Next: head to the Transcribe website and pair this engine with your account. "
+                    "(Pairing UI ships in Phase 8.)</p>"
                     '<button onclick="window.close()">Close this window</button>'
-                    '</body></html>'
+                    "</body></html>"
                 )
                 self._send_html(handoff)
             else:
@@ -239,8 +249,9 @@ def _run_download(tier_name: str, picker_state: PickerState, app_state: State, s
         picker_state.error = str(e)
 
 
-def start_picker(*, gpu_label: str, gpu_backend: str, app_state: State, state_path: Path,
-                 hf_token_path: Path) -> tuple[ThreadingHTTPServer, int, PickerState]:
+def start_picker(
+    *, gpu_label: str, gpu_backend: str, app_state: State, state_path: Path, hf_token_path: Path
+) -> tuple[ThreadingHTTPServer, int, PickerState]:
     """Start picker server in daemon thread; opens default browser; returns (server, port, picker_state).
 
     Args:
@@ -254,11 +265,15 @@ def start_picker(*, gpu_label: str, gpu_backend: str, app_state: State, state_pa
     picker_state = PickerState()
     port_holder: dict = {}
     Handler = _make_handler(
-        gpu_label=gpu_label, gpu_backend=gpu_backend, hf_token_path=hf_token_path,
-        picker_state=picker_state, app_state=app_state,
-        state_path=state_path, server_port_holder=port_holder,
+        gpu_label=gpu_label,
+        gpu_backend=gpu_backend,
+        hf_token_path=hf_token_path,
+        picker_state=picker_state,
+        app_state=app_state,
+        state_path=state_path,
+        server_port_holder=port_holder,
     )
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)   # 127.0.0.1 ONLY (T-7-04)
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)  # 127.0.0.1 ONLY (T-7-04)
     port_holder["server"] = server
     port_holder["port"] = port
     threading.Thread(target=server.serve_forever, daemon=True).start()

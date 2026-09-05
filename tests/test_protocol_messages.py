@@ -8,7 +8,7 @@ Verifies:
 - parse_wire rejects unknown types
 - Module uses only stdlib (json + typing)
 """
-import importlib
+
 import json
 
 import pytest
@@ -18,7 +18,6 @@ from transcribe_engine.protocol.messages import (
     PROTOCOL_VERSION,
     parse_wire,
 )
-
 
 # ---------------------------------------------------------------------------
 # Basic constants
